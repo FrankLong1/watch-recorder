@@ -42,6 +42,23 @@ variable "database_name" {
   default     = "wristmemo"
 }
 
+variable "operator_iam_user" {
+  description = "Human IAM user permitted to impersonate the migrator when running migrations."
+  type        = string
+  nullable    = false
+
+  validation {
+    condition     = can(regex("^[^@[:space:]]+@[^@[:space:]]+$", var.operator_iam_user))
+    error_message = "operator_iam_user must be an email address."
+  }
+}
+
+variable "migrator_service_account_id" {
+  description = "Keyless schema-owner identity used only by scripts/migrate.sh."
+  type        = string
+  default     = "wristmemo-migrator"
+}
+
 variable "ingest_service_account_id" {
   description = "Least-privilege Cloud Run identity for the ingest service."
   type        = string
@@ -77,7 +94,7 @@ variable "image" {
 variable "openai_model" {
   description = "OpenAI transcription model. Changeable without a code change."
   type        = string
-  default     = "gpt-transcribe"
+  default     = "gpt-4o-transcribe"
 }
 
 variable "user_id" {

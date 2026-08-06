@@ -61,7 +61,7 @@ export function loadConfig(): Config {
     ingestToken: required("WRISTMEMO_INGEST_TOKEN"),
     openaiApiKey: required("OPENAI_API_KEY"),
     openaiBaseUrl: optional("OPENAI_BASE_URL", "https://api.openai.com/v1"),
-    openaiModel: optional("OPENAI_MODEL", "gpt-transcribe"),
+    openaiModel: optional("OPENAI_MODEL", "gpt-4o-transcribe"),
     maxAudioBytes: positiveInt("MAX_AUDIO_BYTES", 25 * 1024 * 1024),
     defaultUserId: optional("WRISTMEMO_USER_ID", "frank"),
     database: databaseConfig(),

@@ -159,6 +159,20 @@ describe("transcribe", () => {
     expect(received?.audio?.byteLength).toBe(audio.byteLength);
   });
 
+  test("marks 429 retryable — a rate limit or spent credit balance is not a bad request", async () => {
+    nextStatus = 429;
+    await expect(
+      transcribe({
+        audio: streamOf(new Uint8Array([1, 2, 3])),
+        audioLength: 3,
+        apiKey: "k",
+        baseUrl,
+        model: "m",
+      }),
+    ).rejects.toMatchObject({ retryable: true });
+    nextStatus = 200;
+  });
+
   test("marks a 5xx retryable and a 4xx not", async () => {
     nextStatus = 503;
     await expect(
@@ -183,6 +197,39 @@ describe("transcribe", () => {
     ).rejects.toMatchObject({ retryable: false });
 
     nextStatus = 200;
+  });
+
+  test("survives a reader whose teardown throws", async () => {
+    // Regression: Bun rejects releaseLock once fetch has detached the request
+    // body, which is the ordinary success path when proxying a server request.
+    // An upload that actually completed must not be failed by tidy-up.
+    nextBody = { text: "ok" };
+    const bytes = new Uint8Array([1, 2, 3, 4, 5]);
+    const stream = streamOf(bytes, 2);
+    const getReader = stream.getReader.bind(stream);
+    stream.getReader = (() =>
+      new Proxy(getReader(), {
+        get(target, property) {
+          if (property === "releaseLock") {
+            return () => {
+              throw new TypeError("undefined is not a function");
+            };
+          }
+          const value = Reflect.get(target, property);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      })) as typeof stream.getReader;
+
+    const result = await transcribe({
+      audio: stream,
+      audioLength: bytes.byteLength,
+      apiKey: "k",
+      baseUrl,
+      model: "m",
+    });
+
+    expect(result.text).toBe("ok");
+    expect(received?.audio?.byteLength).toBe(bytes.byteLength);
   });
 
   test("rejects a response without text", async () => {

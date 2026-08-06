@@ -33,6 +33,46 @@ resource "google_sql_database" "wristmemo" {
   instance = data.google_sql_database_instance.shared.name
 }
 
+# Schema owner, used only by scripts/migrate.sh. Kept separate from the ingest
+# identity so the running service can never alter its own schema, and separate
+# from the agent inbox's migrator so neither project's migrations can touch the
+# other's tables. Keyless — the operator impersonates it for the duration of a
+# migration.
+resource "google_service_account" "migrator" {
+  project      = var.project_id
+  account_id   = var.migrator_service_account_id
+  display_name = "WristMemo migrator"
+  description  = "Keyless schema owner for the wristmemo database. Never used by the running service."
+}
+
+resource "google_project_iam_member" "migrator_cloudsql_client" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = google_service_account.migrator.member
+}
+
+resource "google_project_iam_member" "migrator_cloudsql_instance_user" {
+  project = var.project_id
+  role    = "roles/cloudsql.instanceUser"
+  member  = google_service_account.migrator.member
+}
+
+resource "google_service_account_iam_member" "operator_impersonates_migrator" {
+  service_account_id = google_service_account.migrator.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "user:${var.operator_iam_user}"
+}
+
+resource "google_sql_user" "migrator" {
+  project        = var.project_id
+  instance       = data.google_sql_database_instance.shared.name
+  name           = trimsuffix(google_service_account.migrator.email, ".gserviceaccount.com")
+  type           = "CLOUD_IAM_SERVICE_ACCOUNT"
+  database_roles = ["cloudsqlsuperuser"]
+
+  deletion_policy = "ABANDON"
+}
+
 resource "google_service_account" "ingest" {
   project      = var.project_id
   account_id   = var.ingest_service_account_id

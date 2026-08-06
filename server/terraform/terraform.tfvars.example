@@ -10,5 +10,9 @@ sql_instance_name = "demo-agent-inbox-postgres"
 # emitted by `gcloud builds submit` and apply again.
 image = ""
 
-openai_model = "gpt-transcribe"
+# Human IAM user allowed to impersonate the migrator when running migrations.
+# Required — there is no default.
+operator_iam_user = "you@example.com"
+
+openai_model = "gpt-4o-transcribe"
 user_id      = "frank"

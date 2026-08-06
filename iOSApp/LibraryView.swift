@@ -44,8 +44,47 @@ struct LibraryView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+
+                Spacer(minLength: 8)
+
+                UploadBadge(state: item.uploadState)
             }
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// Whether a memo reached the transcription service.
+///
+/// Transcripts never come back to the phone, so without this the upload is
+/// entirely unobservable from the device — a memo that never arrived looks
+/// exactly like one that did. Every state gets a mark, so a missing badge is
+/// never mistaken for success.
+private struct UploadBadge: View {
+
+    let state: PhoneLibrary.UploadState
+
+    var body: some View {
+        switch state {
+        case .uploading:
+            ProgressView()
+                .controlSize(.small)
+                .accessibilityLabel("Uploading")
+        case .pending:
+            icon("clock", .secondary, "Waiting to upload")
+        case .uploaded:
+            icon("checkmark.icloud", .secondary, "Uploaded")
+        case .failed:
+            icon("exclamationmark.triangle.fill", .orange, "Upload failed")
+        }
+    }
+
+    // Typed as Color rather than a shape style so `.secondary` and `.orange`
+    // can share one signature — the hierarchical `.secondary` is not a Color.
+    private func icon(_ symbol: String, _ tint: Color, _ label: String) -> some View {
+        Image(systemName: symbol)
+            .font(.footnote)
+            .foregroundStyle(tint)
+            .accessibilityLabel(label)
     }
 }

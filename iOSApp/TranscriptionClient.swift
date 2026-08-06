@@ -11,7 +11,7 @@ import UIKit
 ///
 /// It is a one-way door. The transcript is not returned; the response carries
 /// only a status code, which is what drives the retry state machine. Transcripts
-/// are read from the database, not from the phone. See BACKEND_ARCHITECTURE.md.
+/// are read from the database, not from the phone. See 1_INGEST_ARCHITECTURE.md.
 @MainActor
 final class TranscriptionClient: NSObject {
 

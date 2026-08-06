@@ -3,7 +3,7 @@
 /// One endpoint. The phone POSTs a finished memo's audio; this streams it to
 /// OpenAI, stores the transcript, and answers with a status code and nothing
 /// else. Audio is never written to disk, a bucket, or a log — see
-/// BACKEND_ARCHITECTURE.md.
+/// 1_INGEST_ARCHITECTURE.md.
 
 import { createHash, timingSafeEqual } from "node:crypto";
 import { Hono } from "hono";

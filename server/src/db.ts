@@ -118,30 +118,40 @@ export function createMemoStore(config: DatabaseConfig): MemoStore {
     /// the original request when its response is lost, so an existence check
     /// alone would let both requests pay OpenAI before either writes the row.
     async withMemoLock(id, operation) {
+      let reserved: Awaited<ReturnType<SQL["reserve"]>>;
       try {
-        const reserved = await client().reserve();
-        let locked = false;
-        try {
-          const rows = await reserved<{ locked: boolean }[]>`
-            SELECT pg_try_advisory_lock(hashtextextended(${id}, 0)) AS locked
-          `;
-          if (rows[0]?.locked !== true) throw new MemoInProgressError();
-          locked = true;
-          return await operation();
-        } finally {
-          try {
-            if (locked) {
-              await reserved`
-                SELECT pg_advisory_unlock(hashtextextended(${id}, 0))
-              `;
-            }
-          } finally {
-            reserved.release();
-          }
-        }
+        reserved = await client().reserve();
       } catch (error) {
-        if (error instanceof MemoInProgressError) throw error;
         wrap(error);
+      }
+
+      let locked = false;
+      try {
+        let rows: { locked: boolean }[];
+        try {
+          rows = (await reserved`
+            SELECT pg_try_advisory_lock(hashtextextended(${id}::text, 0)) AS locked
+          `) as { locked: boolean }[];
+        } catch (error) {
+          wrap(error);
+        }
+        if (rows[0]?.locked !== true) throw new MemoInProgressError();
+        locked = true;
+
+        // Deliberately not wrapped. A transcription failure is not a database
+        // failure, and reporting it as one both hides the cause and sends the
+        // phone the wrong status code.
+        return await operation();
+      } finally {
+        try {
+          if (locked) {
+            await reserved`
+              SELECT pg_advisory_unlock(hashtextextended(${id}::text, 0))
+            `;
+          }
+        } finally {
+          reserved.release();
+        }
       }
     },
 

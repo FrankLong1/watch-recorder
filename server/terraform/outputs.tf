@@ -32,3 +32,11 @@ output "service_url" {
   description = "Empty until an image digest is supplied."
   value       = local.service_enabled ? google_cloud_run_v2_service.ingest[0].uri : ""
 }
+
+output "migrator_database_user" {
+  description = "Impersonate this to run scripts/migrate.sh; it owns the schema and nothing else."
+  value = {
+    service_account = google_service_account.migrator.email
+    database_user   = google_sql_user.migrator.name
+  }
+}

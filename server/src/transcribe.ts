@@ -58,7 +58,15 @@ export function multipart(model: string, audio: ReadableStream<Uint8Array>, audi
   function releaseReader() {
     if (released) return;
     released = true;
-    reader.releaseLock();
+    // Releasing is tidiness only — the reader is discarded along with the
+    // stream either way. Bun rejects this call when the surrounding fetch has
+    // already detached the request body, which happens on the ordinary success
+    // path, so an upload that has actually completed must not be failed by it.
+    try {
+      reader.releaseLock();
+    } catch {
+      // Intentionally ignored.
+    }
   }
 
   const body = new ReadableStream<Uint8Array>({
@@ -86,6 +94,9 @@ export function multipart(model: string, audio: ReadableStream<Uint8Array>, audi
     async cancel(reason) {
       try {
         await reader.cancel(reason);
+      } catch {
+        // Same reasoning as releaseReader: the stream is being torn down, and
+        // failing to tear it down cleanly is not worth surfacing.
       } finally {
         releaseReader();
       }
@@ -131,7 +142,11 @@ export async function transcribe(options: TranscribeOptions): Promise<Transcript
     // The body may carry OpenAI's error message, but it may also echo request
     // detail, so only the status is surfaced or logged.
     await response.body?.cancel();
-    throw new TranscriptionError(`openai responded ${response.status}`, response.status >= 500);
+    // 429 is retryable alongside 5xx. It covers both an ordinary rate limit and
+    // an exhausted credit balance — neither is a defect in the request, and a
+    // memo must not be abandoned because the account was briefly over a limit.
+    const retryable = response.status >= 500 || response.status === 429;
+    throw new TranscriptionError(`openai responded ${response.status}`, retryable);
   }
 
   const parsed = (await response.json()) as { text?: unknown };
