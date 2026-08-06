@@ -13,6 +13,10 @@ final class WatchSyncClient: NSObject {
     private let log = SharedConfig.logger("Sync")
     private weak var store: MemoStore?
     private var session: WCSession? { WCSession.isSupported() ? WCSession.default : nil }
+    private var retryTask: Task<Void, Never>?
+    private var retryDelay: TimeInterval = 30
+
+    private static let maximumRetryDelay: TimeInterval = 30 * 60
 
     func activate(store: MemoStore) {
         self.store = store
@@ -44,6 +48,21 @@ final class WatchSyncClient: NSObject {
             send(memo)
         }
     }
+
+    /// A failed transfer does not necessarily change reachability or activation
+    /// state, so those delegate callbacks alone cannot guarantee a retry. Back
+    /// off to avoid re-queuing in a tight loop when the phone is unavailable.
+    private func scheduleRetry() {
+        guard retryTask == nil else { return }
+        let delay = retryDelay
+        retryDelay = min(retryDelay * 2, Self.maximumRetryDelay)
+        retryTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled else { return }
+            self?.retryTask = nil
+            self?.sendPending()
+        }
+    }
 }
 
 extension WatchSyncClient: WCSessionDelegate {
@@ -70,6 +89,12 @@ extension WatchSyncClient: WCSessionDelegate {
             self.store?.setSyncState(failed ? .pending : .synced, for: id)
             if failed {
                 self.log.error("Transfer failed: \(error?.localizedDescription ?? "?", privacy: .public)")
+                self.scheduleRetry()
+            } else {
+                self.retryDelay = 30
+                // This may be the last outstanding transfer that was keeping
+                // an earlier failed memo from being re-queued.
+                self.sendPending()
             }
         }
     }

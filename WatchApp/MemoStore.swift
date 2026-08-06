@@ -67,11 +67,70 @@ final class MemoStore {
         didLoad = true
         do {
             try createDirectories()
-            let data = try Data(contentsOf: indexURL)
-            memos = try JSONDecoder().decode([Memo].self, from: data).sorted { $0.createdAt > $1.createdAt }
         } catch {
+            log.error("Couldn't create memo storage: \(error.localizedDescription, privacy: .public)")
+            memos = []
+            return
+        }
+
+        if let data = try? Data(contentsOf: indexURL),
+           let decoded = try? JSONDecoder().decode([Memo].self, from: data) {
+            memos = decoded.sorted { $0.createdAt > $1.createdAt }
+        } else {
             memos = []
         }
+
+        recoverUnindexedMemos()
+    }
+
+    /// Rebuilds index entries for a finished file that reached `Memos` just
+    /// before a termination. The capture directory handles interrupted
+    /// recordings; this closes the smaller window between promoting the final
+    /// file and writing the index.
+    private func recoverUnindexedMemos() {
+        let urls = (try? fileManager.contentsOfDirectory(
+            at: memosDirectory,
+            includingPropertiesForKeys: [.creationDateKey]
+        )) ?? []
+
+        // A temporary output is never the committed memo. Its source capture is
+        // still present, so it is safe to clear and retry on the next recovery.
+        for temporary in urls where temporary.pathExtension == "partial" {
+            try? fileManager.removeItem(at: temporary)
+        }
+
+        var knownIDs = Set(memos.map(\.id))
+        let finished = urls
+            .filter { ["m4a", "caf"].contains($0.pathExtension) }
+            .sorted { lhs, rhs in
+                // Prefer compressed AAC if a previous crash left both forms.
+                lhs.pathExtension == "m4a" && rhs.pathExtension != "m4a"
+            }
+
+        var recovered: [Memo] = []
+        for url in finished {
+            guard
+                let id = UUID(uuidString: url.deletingPathExtension().lastPathComponent),
+                !knownIDs.contains(id)
+            else { continue }
+
+            let duration = AudioDuration.of(url)
+            guard duration > Self.minimumDuration else { continue }
+            let createdAt = (try? url.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? Date()
+            recovered.append(Memo(
+                id: id,
+                filename: url.lastPathComponent,
+                createdAt: createdAt,
+                duration: duration
+            ))
+            knownIDs.insert(id)
+        }
+
+        guard !recovered.isEmpty else { return }
+        memos.append(contentsOf: recovered)
+        memos.sort { $0.createdAt > $1.createdAt }
+        persistIndex()
+        log.notice("Recovered \(recovered.count) finished memo(s) missing from the index")
     }
 
     private func persistIndex() {
@@ -103,10 +162,10 @@ final class MemoStore {
     ///
     /// If compression fails the capture is kept as-is rather than thrown away —
     /// a large memo beats a lost one.
-    func finalize(captureURL: URL, id: UUID) async -> Memo? {
+    func finalize(captureURL: URL, id: UUID, recordedAt: Date? = nil) async -> Memo? {
         loadIfNeeded()
         guard let attributes = try? fileManager.attributesOfItem(atPath: captureURL.path) else { return nil }
-        let createdAt = (attributes[.creationDate] as? Date) ?? Date()
+        let createdAt = recordedAt ?? (attributes[.creationDate] as? Date) ?? Date()
 
         // Cheap reject before spinning up an AAC encoder: a header-only capture
         // is a pre-arm that was never recorded into.
@@ -118,24 +177,45 @@ final class MemoStore {
         }
 
         let destination = memosDirectory.appendingPathComponent("\(id.uuidString).m4a")
+        let temporary = memosDirectory.appendingPathComponent("\(id.uuidString).m4a.partial")
+        try? fileManager.removeItem(at: temporary)
         let compressedDuration: TimeInterval? = await Task.detached(priority: .userInitiated) {
-            try? AudioCompressor.compress(source: captureURL, to: destination)
+            try? AudioCompressor.compress(source: captureURL, to: temporary)
         }.value
 
-        let filename: String
-        let duration: TimeInterval
+        var filename: String?
+        var duration: TimeInterval?
         if let compressedDuration {
-            try? fileManager.removeItem(at: captureURL)
-            filename = destination.lastPathComponent
-            duration = compressedDuration
+            do {
+                // A move within this directory is atomic: startup sees either
+                // the old temporary file or the complete final memo, never a
+                // partially written `.m4a` under its permanent name.
+                try fileManager.moveItem(at: temporary, to: destination)
+                try? fileManager.removeItem(at: captureURL)
+                filename = destination.lastPathComponent
+                duration = compressedDuration
+            } catch {
+                log.error("Couldn't promote compressed memo; keeping raw capture: \(error.localizedDescription, privacy: .public)")
+                try? fileManager.removeItem(at: temporary)
+            }
         } else {
-            log.error("Compression failed; keeping raw capture")
-            let fallback = memosDirectory.appendingPathComponent("\(id.uuidString).caf")
-            try? fileManager.moveItem(at: captureURL, to: fallback)
-            filename = fallback.lastPathComponent
-            duration = AudioDuration.of(fallback)
+            try? fileManager.removeItem(at: temporary)
         }
 
+        if filename == nil {
+            log.error("Compression failed; keeping raw capture")
+            let fallback = memosDirectory.appendingPathComponent("\(id.uuidString).caf")
+            do {
+                try fileManager.moveItem(at: captureURL, to: fallback)
+                filename = fallback.lastPathComponent
+                duration = AudioDuration.of(fallback)
+            } catch {
+                log.error("Couldn't file raw capture: \(error.localizedDescription, privacy: .public)")
+                return nil
+            }
+        }
+
+        guard let filename, let duration else { return nil }
         guard duration > Self.minimumDuration else {
             try? fileManager.removeItem(at: memosDirectory.appendingPathComponent(filename))
             return nil
@@ -173,6 +253,14 @@ final class MemoStore {
         var recoveredMemos: [Memo] = []
         for orphan in orphans {
             let id = UUID(uuidString: orphan.deletingPathExtension().lastPathComponent) ?? UUID()
+            if let memo = memos.first(where: { $0.id == id }),
+               fileManager.fileExists(atPath: url(for: memo).path) {
+                // The final file was committed before a termination, but its
+                // source capture remained. It has already been reconstructed
+                // above, so keeping the capture would create a duplicate memo.
+                try? fileManager.removeItem(at: orphan)
+                continue
+            }
             log.notice("Recovering orphaned capture \(orphan.lastPathComponent, privacy: .public)")
             if let memo = await finalize(captureURL: orphan, id: id) {
                 recoveredMemos.append(memo)

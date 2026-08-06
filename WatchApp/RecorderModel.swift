@@ -68,6 +68,10 @@ final class RecorderModel {
     private let log = SharedConfig.logger("RecorderModel")
 
     private var currentID: UUID?
+    /// The moment the user actually started this memo. A pre-armed capture file
+    /// can be created long before that, so its filesystem creation date is not
+    /// suitable metadata for the finished memo.
+    private var recordedAt: Date?
     private var startDate: Date?
     private var accumulated: TimeInterval = 0
     private var ticker: Timer?
@@ -181,7 +185,10 @@ final class RecorderModel {
     // MARK: - Transport
 
     func startRecording() async {
-        guard !startInFlight, phase != .recording, phase != .paused else { return }
+        // `.starting` is valid only for the task queued by `init` after it has
+        // already set the optimistic first frame. A save must finish before a
+        // new recording can replace the model state it will update on return.
+        guard !startInFlight, phase != .recording, phase != .paused, phase != .saving else { return }
         startInFlight = true
         defer { startInFlight = false }
 
@@ -225,7 +232,9 @@ final class RecorderModel {
         do {
             try await engine.start(writingTo: capture.url)
             currentID = capture.id
-            startDate = Date()
+            let now = Date()
+            recordedAt = now
+            startDate = now
             phase = .recording
             lastStartLatencyMilliseconds = Latency.millisecondsSinceLaunch
             startTicker()
@@ -233,6 +242,7 @@ final class RecorderModel {
         } catch {
             log.error("Start failed: \(error.localizedDescription, privacy: .public)")
             currentID = nil
+            recordedAt = nil
             phase = .failed(error.localizedDescription)
             Haptics.failed()
         }
@@ -247,18 +257,32 @@ final class RecorderModel {
         Haptics.recordingStopped()
 
         guard let url = engine.stop(), let id = currentID else {
+            currentID = nil
+            recordedAt = nil
             phase = .idle
             return
         }
         currentID = nil
-        await commit(captureURL: url, id: id, failureMessage: "That memo was too short to save.")
+        let recordedAt = recordedAt
+        self.recordedAt = nil
+        await commit(
+            captureURL: url,
+            id: id,
+            recordedAt: recordedAt,
+            failureMessage: "That memo was too short to save."
+        )
     }
 
     /// The one place a capture becomes a memo. Shared by the normal stop and the
     /// unexpected-stop path, which must never diverge from it.
-    private func commit(captureURL: URL, id: UUID, failureMessage: String) async {
+    private func commit(
+        captureURL: URL,
+        id: UUID,
+        recordedAt: Date? = nil,
+        failureMessage: String
+    ) async {
         phase = .saving
-        if let memo = await store.finalize(captureURL: captureURL, id: id) {
+        if let memo = await store.finalize(captureURL: captureURL, id: id, recordedAt: recordedAt) {
             sync.send(memo)
             phase = .saved(memo)
             Haptics.saved()
@@ -275,6 +299,7 @@ final class RecorderModel {
             store.discardCapture(at: url)
         }
         currentID = nil
+        recordedAt = nil
         phase = .idle
         elapsed = 0
         Haptics.discarded()
@@ -418,6 +443,15 @@ final class RecorderModel {
             return
         }
         currentID = nil
-        Task { await commit(captureURL: captureURL, id: id, failureMessage: "Recording stopped unexpectedly.") }
+        let recordedAt = recordedAt
+        self.recordedAt = nil
+        Task {
+            await commit(
+                captureURL: captureURL,
+                id: id,
+                recordedAt: recordedAt,
+                failureMessage: "Recording stopped unexpectedly."
+            )
+        }
     }
 }
