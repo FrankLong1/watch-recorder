@@ -1,5 +1,4 @@
 import WatchKit
-import os
 
 /// Keeps the app resident so an Action button press is a *warm* launch.
 ///
@@ -13,7 +12,7 @@ import os
 /// so this is a nudge, not a guarantee.
 enum BackgroundWarmth {
 
-    private static let log = Logger(subsystem: "com.franklong.wristmemo", category: "Warmth")
+    private static let log = SharedConfig.logger("Warmth")
 
     /// Slightly under the hourly budget so a wake is always pending.
     private static let interval: TimeInterval = 45 * 60
@@ -30,10 +29,7 @@ enum BackgroundWarmth {
     }
 }
 
-/// Handles the refresh wake and re-arms it.
-///
-/// The work done on wake is deliberately nothing: the point is being alive, not
-/// what happens while awake.
+/// Handles the refresh wake and re-arms it, so a wake is always pending.
 final class WatchAppDelegate: NSObject, WKApplicationDelegate {
 
     func applicationDidFinishLaunching() {

@@ -1,24 +1,8 @@
 import Foundation
+import os
 
-/// Values shared by the watch app and its control extension.
-///
-/// This file is a member of both the `WristMemo Watch App` and
-/// `WristMemoControls` targets so the two processes agree on identifiers.
+/// Identifiers shared by the watch app and its control extension.
 enum SharedConfig {
-
-    /// App Group used to hand a "start recording" request from the control
-    /// extension's process to the app's process.
-    ///
-    /// The group is a *fallback* path only. When `StartRecordingIntent` runs in
-    /// foreground mode the system performs it inside the app itself, and the
-    /// in-process notification is what actually triggers recording.
-    ///
-    /// It is **off by default**: a free (personal) Apple ID team cannot
-    /// provision App Groups, so leaving the entitlement on would break device
-    /// builds for anyone without a paid membership. Without it
-    /// `sharedDefaults` is nil and the in-process path carries the request.
-    /// See DESIGN.md, "Hand-off between processes".
-    static let appGroupIdentifier = "group.com.franklong.wristmemo"
 
     /// Stable identity for the control. Changing this after shipping detaches
     /// the control from any Action button or Control Center slot the user has
@@ -29,7 +13,12 @@ enum SharedConfig {
     /// the system to hold the app in memory — see LATENCY.md.
     static let complicationKind = "com.franklong.wristmemo.complication.record"
 
-    static var sharedDefaults: UserDefaults? {
-        UserDefaults(suiteName: appGroupIdentifier)
+    /// One subsystem for every logger, because the documented device-debugging
+    /// workflow filters on it: `log stream --predicate 'subsystem == "…"'`.
+    /// A typo would drop a category out of that stream with no build error.
+    static let loggingSubsystem = "com.franklong.wristmemo"
+
+    static func logger(_ category: String) -> Logger {
+        Logger(subsystem: loggingSubsystem, category: category)
     }
 }

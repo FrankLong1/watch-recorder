@@ -11,7 +11,7 @@
 | Signing identity | `Apple Development: fylong00@gmail.com`, **Team 44X645LJ6H**, already in the login keychain |
 | Project signing | `DEVELOPMENT_TEAM = 44X645LJ6H` set at project level, inherited by all three targets |
 | Bundle IDs | `com.franklong.wristmemo{,.watchkitapp,.watchkitapp.controls}` |
-| App Groups | **Disabled by default** — a free/personal team cannot provision them, and the app only uses the group as a fallback |
+| App Groups | Not used — the launch hand-off is in-process, so nothing needs a paid-only capability |
 
 Apple-account connectivity is confirmed working: a signed device build reached
 Apple's portal and returned *"Your team has no devices from which to generate a
@@ -129,9 +129,6 @@ xcrun simctl spawn $SIM log stream --predicate 'subsystem == "com.franklong.wris
 - **7-day expiry.** If Team 44X645LJ6H is a free personal team, the app stops
   launching after 7 days and needs a re-run from Xcode. A paid membership
   raises this to a year.
-- **App Groups need a paid account.** They are off by default. With a paid
-  membership, re-add `CODE_SIGN_ENTITLEMENTS = Config/Watch{App,Controls}.entitlements`
-  to the two watch targets to enable the cross-process hand-off fallback.
 - **Launch the app once** before the control shows up in the Action button list.
 - **Sync needs the companion installed** on the iPhone; `transferFile` has
   nowhere to deliver otherwise.

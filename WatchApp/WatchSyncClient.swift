@@ -1,6 +1,5 @@
 import Foundation
 import WatchConnectivity
-import os
 
 /// Ships finished memos to the paired iPhone.
 ///
@@ -9,14 +8,11 @@ import os
 /// becomes available. Nothing here blocks recording — a memo is safe on the
 /// watch the moment it is saved, and sync is best-effort on top of that.
 @MainActor
-@Observable
 final class WatchSyncClient: NSObject {
 
-    private let log = Logger(subsystem: "com.franklong.wristmemo", category: "Sync")
+    private let log = SharedConfig.logger("Sync")
     private weak var store: MemoStore?
     private var session: WCSession? { WCSession.isSupported() ? WCSession.default : nil }
-
-    private(set) var isReachable = false
 
     func activate(store: MemoStore) {
         self.store = store
@@ -25,13 +21,13 @@ final class WatchSyncClient: NSObject {
         session.activate()
     }
 
-    /// Queues a memo, tolerating a missing or inactive session.
     func send(_ memo: Memo) {
         guard let store, let session, session.activationState == .activated else { return }
         let url = store.url(for: memo)
         guard FileManager.default.fileExists(atPath: url.path) else { return }
 
         store.setSyncState(.transferring, for: memo.id)
+        // The phone reads these instead of re-deriving them from the audio.
         session.transferFile(url, metadata: [
             "id": memo.id.uuidString,
             "createdAt": memo.createdAt.timeIntervalSince1970,
@@ -40,12 +36,10 @@ final class WatchSyncClient: NSObject {
         log.info("Queued \(memo.filename, privacy: .public)")
     }
 
-    /// Re-queues anything that never made it, called when the session activates
-    /// or the phone comes back within range.
+    /// Re-queues anything that never made it, when the session activates or the
+    /// phone comes back within range.
     func sendPending() {
-        guard let store else { return }
-        let outstanding = session?.outstandingFileTransfers.count ?? 0
-        guard outstanding == 0 else { return }
+        guard let store, session?.outstandingFileTransfers.isEmpty ?? false else { return }
         for memo in store.memos where memo.syncState != .synced {
             send(memo)
         }
@@ -59,19 +53,13 @@ extension WatchSyncClient: WCSessionDelegate {
         activationDidCompleteWith activationState: WCSessionActivationState,
         error: Error?
     ) {
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            self.isReachable = session.isReachable
-            if activationState == .activated { self.sendPending() }
-        }
+        guard activationState == .activated else { return }
+        Task { @MainActor [weak self] in self?.sendPending() }
     }
 
     nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            self.isReachable = session.isReachable
-            if session.isReachable { self.sendPending() }
-        }
+        guard session.isReachable else { return }
+        Task { @MainActor [weak self] in self?.sendPending() }
     }
 
     nonisolated func session(_ session: WCSession, didFinish fileTransfer: WCSessionFileTransfer, error: Error?) {

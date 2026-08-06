@@ -8,18 +8,11 @@ import Foundation
 /// `WCSession.transferFile` needs to move the memo to the phone.
 enum AudioCompressor {
 
-    struct Result {
-        let url: URL
-        let duration: TimeInterval
-    }
-
-    /// Reads `source` and writes an `.m4a` at `destination`.
-    ///
-    /// Runs off the main actor: this is CPU-bound and a long memo would
-    /// otherwise stall the UI.
-    static func compress(source: URL, to destination: URL) throws -> Result {
+    /// Reads `source`, writes an `.m4a` at `destination`, returns its duration.
+    static func compress(source: URL, to destination: URL) throws -> TimeInterval {
         let input = try AVAudioFile(forReading: source)
-        let duration = Double(input.length) / input.fileFormat.sampleRate
+        let totalFrames = input.length
+        let duration = Double(totalFrames) / input.fileFormat.sampleRate
 
         let settings: [String: Any] = [
             AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
@@ -34,18 +27,12 @@ enum AudioCompressor {
             throw CocoaError(.fileWriteUnknown)
         }
 
-        while input.framePosition < input.length {
+        while input.framePosition < totalFrames {
             try input.read(into: buffer)
             guard buffer.frameLength > 0 else { break }
             try output.write(from: buffer)
         }
 
-        return Result(url: destination, duration: duration)
-    }
-
-    /// Duration of a capture file without decoding it, for recovered memos.
-    static func duration(of url: URL) -> TimeInterval {
-        guard let file = try? AVAudioFile(forReading: url) else { return 0 }
-        return Double(file.length) / file.fileFormat.sampleRate
+        return duration
     }
 }

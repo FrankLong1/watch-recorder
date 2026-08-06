@@ -1,6 +1,5 @@
 import AVFoundation
 import Foundation
-import os
 
 /// Thin wrapper around `AVAudioRecorder` plus the watch's audio session.
 ///
@@ -9,8 +8,6 @@ import os
 /// at stop time, so a file left behind by a killed process is still fully
 /// decodable. `MemoStore` compresses it to AAC once the recording ends, and
 /// recovers orphaned captures on the next launch.
-///
-/// Everything here is arranged around time-to-first-sample; see LATENCY.md.
 @MainActor
 final class RecordingEngine: NSObject {
 
@@ -37,24 +34,27 @@ final class RecordingEngine: NSObject {
         AVLinearPCMIsBigEndianKey: false
     ]
 
-    private let log = Logger(subsystem: "com.franklong.wristmemo", category: "RecordingEngine")
+    private let log = SharedConfig.logger("RecordingEngine")
     private var recorder: AVAudioRecorder?
-
     private var armedRecorder: AVAudioRecorder?
-    private var armedURL: URL?
 
     private(set) var captureURL: URL?
-    var isRecording: Bool { recorder?.isRecording ?? false }
+    private(set) var armedCaptureURL: URL?
 
-    /// Called when the recorder stops for a reason the app didn't ask for.
+    /// Files the engine owns right now. A directory sweep that ignores these
+    /// would transcode and delete the recording in progress.
+    var reservedCaptureURLs: Set<URL> {
+        Set([captureURL, armedCaptureURL].compactMap { $0 })
+    }
+
     var onUnexpectedStop: ((URL?) -> Void)?
 
     // MARK: - Session
 
     /// Sets the category only. Doing this as early as possible is the documented
-    /// way to avoid a stall later: once a session is activated it is too late to
-    /// configure it cheaply, and changing category mid-flight is expensive.
-    /// Activation stays deferred because it lights the microphone indicator.
+    /// way to keep activation cheap: once a session is activated it is too late,
+    /// and changing category mid-flight is expensive. Activation stays separate
+    /// because it lights the microphone indicator.
     func configureSession() {
         do {
             try AVAudioSession.sharedInstance().setCategory(.record, mode: .default)
@@ -63,24 +63,18 @@ final class RecordingEngine: NSObject {
         }
     }
 
-    private enum Activation {
-        case idle
-        case inFlight
-        case active
-        case failed
-    }
+    private enum Activation { case idle, inFlight, active, failed }
 
     private var activation: Activation = .idle
     private var activationWaiters: [CheckedContinuation<Void, Error>] = []
 
-    /// Issues the activation request *now*, without waiting for a Swift
-    /// concurrency hop.
+    /// Issues the activation request *now*, without a Swift concurrency hop.
     ///
-    /// On a launch triggered by the Action button the main actor is busy
-    /// bringing SwiftUI up, so anything scheduled with `Task` queues behind it.
-    /// Calling the completion-handler API directly gets the request in flight
-    /// during launch instead of after it, and the completion lands whenever the
-    /// main actor frees up.
+    /// During launch the main actor is busy bringing SwiftUI up, so anything
+    /// scheduled with `Task` — including an `async let` whose body is
+    /// main-actor-isolated — queues behind it. Calling the completion-handler
+    /// API directly gets the request in flight immediately; the completion
+    /// lands whenever the actor frees up.
     func beginActivation() {
         guard activation == .idle else { return }
         activation = .inFlight
@@ -106,36 +100,16 @@ final class RecordingEngine: NSObject {
         }
     }
 
-    /// watchOS uses `activate(options:completionHandler:)` rather than
-    /// `setActive(_:)`; the system may need to ask the user to pick a route, so
-    /// activation is asynchronous here in a way it is not on iOS.
-    private func activateSession() async throws {
-        switch activation {
-        case .active:
-            return
-        case .idle:
-            beginActivation()
-            try await waitForActivation()
-        case .inFlight:
-            try await waitForActivation()
-        case .failed:
-            // An early speculative attempt can fail simply because the app was
-            // not frontmost yet. Retry once, now that the user is definitely
-            // looking at it, rather than failing the recording outright.
-            activation = .idle
-            beginActivation()
-            try await waitForActivation()
-        }
-    }
-
-    private func waitForActivation() async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            switch activation {
-            case .active: continuation.resume()
-            case .failed: continuation.resume(throwing: EngineError.sessionActivationFailed(nil))
-            default: activationWaiters.append(continuation)
-            }
-        }
+    private func awaitActivation() async throws {
+        if activation == .active { return }
+        // An early speculative attempt can fail simply because the app was not
+        // frontmost yet, so a failure is retried once rather than failing the
+        // recording outright.
+        if activation == .failed { activation = .idle }
+        beginActivation()
+        // Everything here is main-actor isolated and nothing suspends between
+        // the check above and this append, so `activation` is still `.inFlight`.
+        try await withCheckedThrowingContinuation { activationWaiters.append($0) }
     }
 
     // MARK: - Pre-arming
@@ -143,8 +117,7 @@ final class RecordingEngine: NSObject {
     /// Builds the recorder and creates its file ahead of the user asking.
     ///
     /// `prepareToRecord()` does the file creation and encoder setup that would
-    /// otherwise sit between the button press and the first sample. On a warm
-    /// app this turns starting into little more than `record()`.
+    /// otherwise sit between the button press and the first sample.
     func prearm(url: URL) {
         guard recorder == nil, armedRecorder == nil else { return }
         guard let candidate = try? AVAudioRecorder(url: url, settings: Self.captureSettings) else { return }
@@ -152,29 +125,25 @@ final class RecordingEngine: NSObject {
         candidate.isMeteringEnabled = true
         candidate.prepareToRecord()
         armedRecorder = candidate
-        armedURL = url
-        log.debug("Pre-armed \(url.lastPathComponent, privacy: .public)")
+        armedCaptureURL = url
     }
 
-    var armedCaptureURL: URL? { armedURL }
-
     func discardPrearm() {
-        if let armedURL {
-            try? FileManager.default.removeItem(at: armedURL)
+        if let armedCaptureURL {
+            try? FileManager.default.removeItem(at: armedCaptureURL)
         }
         armedRecorder = nil
-        armedURL = nil
+        armedCaptureURL = nil
     }
 
     // MARK: - Transport
 
     func start(writingTo url: URL) async throws {
-        // Session activation is the slowest step and does not depend on the
-        // recorder, so overlap the two rather than paying for them in series.
-        async let activation: Void = activateSession()
+        // Before the recorder is built, not after: activation is the slow step.
+        beginActivation()
 
         let target: AVAudioRecorder
-        if let armedRecorder, armedURL == url {
+        if let armedRecorder, armedCaptureURL == url {
             target = armedRecorder
         } else {
             discardPrearm()
@@ -183,13 +152,13 @@ final class RecordingEngine: NSObject {
             target.isMeteringEnabled = true
         }
 
-        try await activation
+        try await awaitActivation()
 
         guard target.record() else { throw EngineError.recorderRefusedToStart }
 
         recorder = target
         armedRecorder = nil
-        armedURL = nil
+        armedCaptureURL = nil
         captureURL = url
         Latency.mark("first sample")
     }
@@ -198,15 +167,10 @@ final class RecordingEngine: NSObject {
         recorder?.pause()
     }
 
-    /// Returns `false` when the session could not be reactivated, which happens
-    /// if something else (a call, Siri) still owns the microphone.
     func resume() -> Bool {
-        guard let recorder else { return false }
-        return recorder.record()
+        recorder?.record() ?? false
     }
 
-    /// Stops the recorder and hands back the finished capture file.
-    @discardableResult
     func stop() -> URL? {
         let url = captureURL
         recorder?.stop()
@@ -214,7 +178,6 @@ final class RecordingEngine: NSObject {
         captureURL = nil
         // Leaving the session active would keep the microphone indicator lit.
         try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
-        // The session is down, so the next recording has to activate again.
         activation = .idle
         return url
     }
@@ -236,21 +199,18 @@ extension RecordingEngine: AVAudioRecorderDelegate {
 
     nonisolated func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {
         guard !flag else { return }
-        let url = recorder.url
-        Task { @MainActor [weak self] in
-            guard let self, self.recorder === recorder else { return }
-            self.log.error("Recorder finished unsuccessfully")
-            self.recorder = nil
-            self.captureURL = nil
-            self.onUnexpectedStop?(url)
-        }
+        reportUnexpectedStop(of: recorder, reason: "finished unsuccessfully")
     }
 
     nonisolated func audioRecorderEncodeErrorDidOccur(_ recorder: AVAudioRecorder, error: Error?) {
+        reportUnexpectedStop(of: recorder, reason: error?.localizedDescription ?? "encode error")
+    }
+
+    private nonisolated func reportUnexpectedStop(of recorder: AVAudioRecorder, reason: String) {
         let url = recorder.url
         Task { @MainActor [weak self] in
             guard let self, self.recorder === recorder else { return }
-            self.log.error("Encode error: \(error?.localizedDescription ?? "unknown", privacy: .public)")
+            self.log.error("Recorder stopped: \(reason, privacy: .public)")
             self.recorder = nil
             self.captureURL = nil
             self.onUnexpectedStop?(url)

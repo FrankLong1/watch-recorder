@@ -1,5 +1,4 @@
 import Foundation
-import os
 
 /// On-disk home for recordings and their metadata.
 ///
@@ -14,19 +13,29 @@ final class MemoStore {
 
     private(set) var memos: [Memo] = []
 
-    private let log = Logger(subsystem: "com.franklong.wristmemo", category: "MemoStore")
+    private let log = SharedConfig.logger("MemoStore")
     private let fileManager = FileManager.default
 
-    // A stored `let`, not a `lazy var`: @Observable synthesises an init
-    // accessor for every stored `var`, and it cannot do that for a lazy one.
-    private let root: URL = {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("WristMemo", isDirectory: true)
-    }()
+    // Stored, not computed: these are rebuilt on every access otherwise, and
+    // `memosDirectory` alone is hit four times per save.
+    private let capturesDirectory: URL
+    private let memosDirectory: URL
+    private let indexURL: URL
 
-    private var capturesDirectory: URL { root.appendingPathComponent("Captures", isDirectory: true) }
-    private var memosDirectory: URL { root.appendingPathComponent("Memos", isDirectory: true) }
-    private var indexURL: URL { root.appendingPathComponent("memos.json") }
+    private var didCreateDirectories = false
+    private var didLoad = false
+
+    /// Captures shorter than this are the mic never having opened, or a
+    /// pre-armed file that was never recorded into.
+    private static let minimumDuration: TimeInterval = 0.3
+
+    init() {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let root = base.appendingPathComponent("WristMemo", isDirectory: true)
+        capturesDirectory = root.appendingPathComponent("Captures", isDirectory: true)
+        memosDirectory = root.appendingPathComponent("Memos", isDirectory: true)
+        indexURL = root.appendingPathComponent("memos.json")
+    }
 
     func url(for memo: Memo) -> URL {
         memosDirectory.appendingPathComponent(memo.filename)
@@ -38,15 +47,17 @@ final class MemoStore {
         return capturesDirectory.appendingPathComponent("\(id.uuidString).caf")
     }
 
+    /// Memoised — this sits on the record path and would otherwise re-issue two
+    /// `mkdir` syscalls on every call.
     private func createDirectories() throws {
+        guard !didCreateDirectories else { return }
         for directory in [capturesDirectory, memosDirectory] {
             try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         }
+        didCreateDirectories = true
     }
 
     // MARK: - Index
-
-    private var didLoad = false
 
     /// Idempotent, and never on the recording hot path. `finalize` calls it too:
     /// saving before the index has loaded would persist an array containing only
@@ -54,10 +65,6 @@ final class MemoStore {
     func loadIfNeeded() {
         guard !didLoad else { return }
         didLoad = true
-        load()
-    }
-
-    private func load() {
         do {
             try createDirectories()
             let data = try Data(contentsOf: indexURL)
@@ -78,12 +85,6 @@ final class MemoStore {
         }
     }
 
-    func update(_ memo: Memo) {
-        guard let index = memos.firstIndex(where: { $0.id == memo.id }) else { return }
-        memos[index] = memo
-        persistIndex()
-    }
-
     func setSyncState(_ state: Memo.SyncState, for id: UUID) {
         guard let index = memos.firstIndex(where: { $0.id == id }) else { return }
         memos[index].syncState = state
@@ -102,47 +103,45 @@ final class MemoStore {
     ///
     /// If compression fails the capture is kept as-is rather than thrown away —
     /// a large memo beats a lost one.
-    func finalize(captureURL: URL, id: UUID, recovered: Bool = false) async -> Memo? {
+    func finalize(captureURL: URL, id: UUID) async -> Memo? {
         loadIfNeeded()
-        guard fileManager.fileExists(atPath: captureURL.path) else { return nil }
+        guard let attributes = try? fileManager.attributesOfItem(atPath: captureURL.path) else { return nil }
+        let createdAt = (attributes[.creationDate] as? Date) ?? Date()
 
-        let attributes = try? fileManager.attributesOfItem(atPath: captureURL.path)
-        let createdAt = (attributes?[.creationDate] as? Date) ?? Date()
+        // Cheap reject before spinning up an AAC encoder: a header-only capture
+        // is a pre-arm that was never recorded into.
+        let bytes = (attributes[.size] as? Int) ?? 0
+        let minimumBytes = Int(RecordingEngine.captureSampleRate * 2 * Self.minimumDuration)
+        guard bytes > minimumBytes else {
+            try? fileManager.removeItem(at: captureURL)
+            return nil
+        }
+
         let destination = memosDirectory.appendingPathComponent("\(id.uuidString).m4a")
-
-        let compressed: AudioCompressor.Result? = await Task.detached(priority: .userInitiated) {
+        let compressedDuration: TimeInterval? = await Task.detached(priority: .userInitiated) {
             try? AudioCompressor.compress(source: captureURL, to: destination)
         }.value
 
-        let memo: Memo
-        if let compressed {
+        let filename: String
+        let duration: TimeInterval
+        if let compressedDuration {
             try? fileManager.removeItem(at: captureURL)
-            memo = Memo(
-                id: id,
-                filename: destination.lastPathComponent,
-                createdAt: createdAt,
-                duration: compressed.duration,
-                recovered: recovered
-            )
+            filename = destination.lastPathComponent
+            duration = compressedDuration
         } else {
             log.error("Compression failed; keeping raw capture")
             let fallback = memosDirectory.appendingPathComponent("\(id.uuidString).caf")
             try? fileManager.moveItem(at: captureURL, to: fallback)
-            memo = Memo(
-                id: id,
-                filename: fallback.lastPathComponent,
-                createdAt: createdAt,
-                duration: AudioCompressor.duration(of: fallback),
-                recovered: recovered
-            )
+            filename = fallback.lastPathComponent
+            duration = AudioDuration.of(fallback)
         }
 
-        // Zero-length captures happen if the mic never opened; don't clutter the list.
-        guard memo.duration > 0.3 else {
-            try? fileManager.removeItem(at: memosDirectory.appendingPathComponent(memo.filename))
+        guard duration > Self.minimumDuration else {
+            try? fileManager.removeItem(at: memosDirectory.appendingPathComponent(filename))
             return nil
         }
 
+        let memo = Memo(id: id, filename: filename, createdAt: createdAt, duration: duration)
         memos.insert(memo, at: 0)
         persistIndex()
         return memo
@@ -156,10 +155,9 @@ final class MemoStore {
 
     /// Rebuilds memos from captures left behind by a previous run.
     ///
-    /// Runs *after* recording may already have started — the launch path no
-    /// longer waits for it — so anything the engine currently owns has to be
-    /// excluded. Without that, recovery would transcode and delete the file
-    /// being recorded into right now.
+    /// Runs after recording may already have started, so anything the engine
+    /// currently owns has to be excluded — otherwise this transcodes and deletes
+    /// the file being recorded into right now.
     @discardableResult
     func recoverOrphanedCaptures(excluding inFlight: Set<URL> = []) async -> [Memo] {
         loadIfNeeded()
@@ -172,7 +170,7 @@ final class MemoStore {
         for orphan in orphans {
             let id = UUID(uuidString: orphan.deletingPathExtension().lastPathComponent) ?? UUID()
             log.notice("Recovering orphaned capture \(orphan.lastPathComponent, privacy: .public)")
-            if let memo = await finalize(captureURL: orphan, id: id, recovered: true) {
+            if let memo = await finalize(captureURL: orphan, id: id) {
                 recoveredMemos.append(memo)
             } else {
                 try? fileManager.removeItem(at: orphan)

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Routes on permission first, then on recording phase.
+/// Routes on recording phase first, then on permission.
 ///
 /// There is no `NavigationStack` push into the recording screen on purpose: a
 /// push animates, and when the app is launched by the Action button the
@@ -11,31 +11,23 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            switch model.permission {
-            case .undetermined:
-                PermissionView(state: .ask)
-            case .denied:
-                PermissionView(state: .denied)
-            case .granted:
-                grantedContent
+            switch model.phase {
+            case .starting, .recording, .paused:
+                RecordingView()
+            case .saving:
+                SavingView()
+            case .saved(let memo):
+                SavedView(memo: memo)
+            case .failed(let message):
+                FailureView(message: message)
+            case .idle:
+                switch model.permission {
+                case .undetermined: PermissionView(state: .ask)
+                case .denied: PermissionView(state: .denied)
+                case .granted: HomeView()
+                }
             }
         }
         .task { await model.bootstrap() }
-    }
-
-    @ViewBuilder
-    private var grantedContent: some View {
-        switch model.phase {
-        case .starting, .recording, .paused:
-            RecordingView()
-        case .saving:
-            SavingView()
-        case .saved(let memo):
-            SavedView(memo: memo)
-        case .failed(let message):
-            FailureView(message: message)
-        case .idle:
-            HomeView()
-        }
     }
 }

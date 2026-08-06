@@ -1,5 +1,4 @@
 import Foundation
-import os
 
 /// Measurement for the only number that matters here: how long after the app's
 /// process starts does the first audio sample hit disk.
@@ -10,7 +9,7 @@ import os
 /// warm (see LATENCY.md).
 enum Latency {
 
-    private static let log = Logger(subsystem: "com.franklong.wristmemo", category: "Latency")
+    private static let log = SharedConfig.logger("Latency")
 
     /// True process exec time, via sysctl. Falls back to first-touch time if the
     /// sandbox refuses the query.

@@ -87,33 +87,37 @@ on disk in a decodable format the whole time.
 
 ### Navigation
 
-There is none. `RootView` switches on permission state, then on recording phase.
+There is none. `RootView` switches on recording phase, then on permission.
 A `NavigationStack` push would animate, and when the app is launched by the
 Action button the recording UI has to be the first thing drawn — not the second.
 
 ### Hand-off between processes
 
-The system decides which process performs an intent, so the request is written
-two ways and both converge on one flag:
+`.foreground(.immediate)` means the system performs the intent inside the app's
+own process, so the hand-off is a plain in-process latch: `perform()` sets a
+flag and posts a notification, and `RecorderModel` reads the flag in `init`.
 
-1. **In-process** — `.foreground(.immediate)` performs the intent inside the app,
-   so a `NotificationCenter` post reaches `RecorderModel` directly. This is the
-   path that runs in practice.
-2. **App Group timestamp** — read during start-up, for the case where the intent
-   ran elsewhere (Shortcuts) and the app launched afterwards. Requests older
-   than 20 seconds are ignored so opening the app later from the app grid never
-   starts a surprise recording.
+It is a latch rather than only a notification because ordering is not
+guaranteed — the intent can run before `RecorderModel` exists, and a
+notification posted then would be dropped. A flag set before and read after
+works either way; the notification just makes an already-running app react
+immediately instead of at the next scene-phase change.
 
-The App Group is a fallback, not a requirement. Drop the entitlement and the app
-still works.
+An earlier version also wrote the request to an App Group container as a
+"cross-process fallback". That was cargo cult: the entitlement is not enabled,
+and `UserDefaults(suiteName:)` silently vends a store inside the app's own
+container when it isn't, so the fallback was the in-process path wearing a
+disguise. Deleted.
 
 ## Files
 
 ```
-Shared/            in both the watch app and the control extension
-  SharedConfig            identifiers
-  RecordingLaunchRequest  the hand-off channel
-  StartRecordingIntent    the intent behind the control
+Shared/            compiled into more than one target
+  SharedConfig            identifiers + the one logging subsystem
+  RecordingLaunchRequest  the hand-off latch          (watch + control ext)
+  StartRecordingIntent    the intent behind the control (watch + control ext)
+  Formatting              duration formatting          (all three targets)
+  AudioDuration           duration of a file           (all three targets)
 
 WatchControls/     the control extension
   ControlsBundle          @main WidgetBundle
@@ -123,6 +127,8 @@ WatchApp/
   RecorderModel           state machine: permission, phase, interruptions, battery
   RecordingEngine         AVAudioRecorder + watch audio session
   AudioCompressor         PCM → AAC, off the main actor
+  Latency                 instrumentation for time-to-first-sample
+  BackgroundWarmth        keeps the app resident for warm launches
   MemoStore               disk layout, index, crash recovery
   WatchSyncClient         WCSession.transferFile with retry
   Views/                  RootView, RecordingView, HomeView, PermissionView

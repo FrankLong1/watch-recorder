@@ -2,8 +2,9 @@ import SwiftUI
 
 /// The screen the Action button lands on.
 ///
-/// Kept deliberately plain: at a glance, from a wrist, the only questions are
-/// "is it recording?" and "how long?". Everything else is one tap away or gone.
+/// The timer and meter are separate views that read the model themselves, so
+/// the 10 Hz `elapsed` and `level` writes invalidate only those leaves instead
+/// of rebuilding the status row and both buttons ten times a second.
 struct RecordingView: View {
 
     @Environment(RecorderModel.self) private var model
@@ -13,8 +14,8 @@ struct RecordingView: View {
     var body: some View {
         VStack(spacing: 8) {
             statusRow
-            timer
-            LevelMeter(level: model.level, isActive: !isPaused)
+            ElapsedTimer()
+            LevelMeter(isActive: !isPaused)
                 .frame(height: 16)
             controls
 
@@ -39,33 +40,12 @@ struct RecordingView: View {
         }
     }
 
-    private var timer: some View {
-        Text(model.elapsed.recordingClock)
-            .font(.system(size: 42, weight: .semibold, design: .rounded))
-            // Fixed-width digits stop the timer jittering as numbers change.
-            .monospacedDigit()
-            .minimumScaleFactor(0.6)
-            .lineLimit(1)
-    }
-
-    /// Two buttons, not three. Pause still exists internally for phone-call
-    /// interruptions, but a demo does not need a third target on a 49mm screen.
     private var controls: some View {
         HStack(spacing: 14) {
-            CircleButton(
-                systemImage: "xmark",
-                tint: .secondary,
-                accessibilityLabel: "Discard recording"
-            ) {
+            CircleButton(systemImage: "xmark", tint: .secondary, accessibilityLabel: "Discard recording") {
                 model.cancelRecording()
             }
-
-            CircleButton(
-                systemImage: "stop.fill",
-                tint: .red,
-                filled: true,
-                accessibilityLabel: "Stop and save recording"
-            ) {
+            CircleButton(systemImage: "stop.fill", tint: .red, filled: true, accessibilityLabel: "Stop and save recording") {
                 Task { await model.stopAndSave() }
             }
         }
@@ -73,6 +53,19 @@ struct RecordingView: View {
 }
 
 // MARK: - Pieces
+
+private struct ElapsedTimer: View {
+    @Environment(RecorderModel.self) private var model
+
+    var body: some View {
+        Text(model.elapsed.recordingClock)
+            .font(.system(size: 42, weight: .semibold, design: .rounded))
+            // Fixed-width digits stop the timer jittering as numbers change.
+            .monospacedDigit()
+            .minimumScaleFactor(0.6)
+            .lineLimit(1)
+    }
+}
 
 private struct RecordingDot: View {
     let isAnimating: Bool
@@ -93,31 +86,33 @@ private struct RecordingDot: View {
 }
 
 private struct LevelMeter: View {
-    let level: Double
+    @Environment(RecorderModel.self) private var model
     let isActive: Bool
 
-    private let barCount = 13
+    private static let maximumHeight: CGFloat = 16
+
+    /// A symmetric envelope so the bars read as a waveform rather than a bar
+    /// chart. Depends only on the bar count, so it is computed once.
+    private static let envelope: [CGFloat] = {
+        let barCount = 13
+        let centre = Double(barCount - 1) / 2
+        return (0..<barCount).map { index in
+            CGFloat(1 - (abs(Double(index) - centre) / centre * 0.65))
+        }
+    }()
 
     var body: some View {
+        let scale = isActive ? max(0.12, model.level) : 0.12
         HStack(spacing: 2) {
-            ForEach(0..<barCount, id: \.self) { index in
+            ForEach(Self.envelope.indices, id: \.self) { index in
                 Capsule()
                     .fill(isActive ? Color.red : Color.secondary)
                     .opacity(isActive ? 1 : 0.4)
-                    .frame(height: height(for: index))
+                    .frame(height: max(3, Self.maximumHeight * Self.envelope[index] * scale))
             }
         }
-        .animation(.easeOut(duration: 0.12), value: level)
+        .animation(.easeOut(duration: 0.12), value: model.level)
         .accessibilityHidden(true)
-    }
-
-    /// Shapes the bars into a symmetric envelope so the meter reads as a
-    /// waveform rather than a bar chart.
-    private func height(for index: Int) -> CGFloat {
-        let centre = Double(barCount - 1) / 2
-        let distance = abs(Double(index) - centre) / centre
-        let envelope = 1 - (distance * 0.65)
-        return max(3, 16 * envelope * (isActive ? max(0.12, level) : 0.12))
     }
 }
 

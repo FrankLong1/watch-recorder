@@ -88,24 +88,15 @@ struct MemoRow: View {
         .padding(.vertical, 2)
     }
 
-    @ViewBuilder
     private var syncBadge: some View {
-        switch memo.syncState {
-        case .synced:
-            Image(systemName: "iphone")
-                .font(.system(size: 11))
-                .foregroundStyle(.green)
-                .accessibilityLabel("Synced to iPhone")
-        case .transferring:
-            Image(systemName: "arrow.triangle.2.circlepath")
-                .font(.system(size: 11))
-                .foregroundStyle(.blue)
-                .accessibilityLabel("Syncing")
-        case .pending:
-            Image(systemName: "clock")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-                .accessibilityLabel("Waiting to sync")
+        let (symbol, tint, label): (String, Color, String) = switch memo.syncState {
+        case .synced:       ("iphone", .green, "Synced to iPhone")
+        case .transferring: ("arrow.triangle.2.circlepath", .blue, "Syncing")
+        case .pending:      ("clock", .secondary, "Waiting to sync")
         }
+        return Image(systemName: symbol)
+            .font(.system(size: 11))
+            .foregroundStyle(tint)
+            .accessibilityLabel(label)
     }
 }

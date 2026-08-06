@@ -24,8 +24,8 @@ struct StartRecordingIntent: AppIntent {
     /// the app afterwards — noticeably slower here.
     static let supportedModes: IntentModes = .foreground(.immediate)
 
-    /// Also surfaces the action in Shortcuts and Siri, which gives non-Ultra
-    /// watches a route to the same behaviour.
+    /// Also surfaces the action in Shortcuts and Siri, the only comparable
+    /// route on watches without an Action button.
     static let isDiscoverable = true
 
     func perform() async throws -> some IntentResult {

@@ -2,17 +2,28 @@ import AVFoundation
 import Foundation
 import SwiftUI
 import WatchKit
-import os
+
+/// Simulator-only switches, isolated here so the production launch path has no
+/// conditional compilation in it.
+private enum DebugOptions {
+    static var autoStopAfter: TimeInterval? {
+        #if DEBUG
+        let seconds = UserDefaults.standard.double(forKey: "WristMemoAutoStopAfter")
+        return seconds > 0 ? seconds : nil
+        #else
+        nil
+        #endif
+    }
+}
 
 /// Coordinates permission, the recording engine, storage and sync, and owns the
 /// state the UI renders.
 ///
 /// The ordering in here is the whole latency story. `init()` runs before SwiftUI
 /// builds a single view, so a launch triggered by the Action button starts the
-/// microphone from there — not from a view's `.task`, which would wait for the
-/// first frame. Everything that is not on the path to the first audio sample —
-/// loading the memo index, activating WatchConnectivity, recovering orphaned
-/// captures — is deferred until after recording is underway. See LATENCY.md.
+/// microphone from there. Everything that is not on the path to the first audio
+/// sample — the memo index, WatchConnectivity, recovering orphaned captures —
+/// is deferred until after recording is underway. See LATENCY.md.
 @MainActor
 @Observable
 final class RecorderModel {
@@ -40,9 +51,6 @@ final class RecorderModel {
     private(set) var elapsed: TimeInterval = 0
     private(set) var level: Double = 0
     private(set) var recoveredCount = 0
-
-    /// Milliseconds from process start to the first sample, surfaced in DEBUG so
-    /// the demo can show the number rather than assert it.
     private(set) var lastStartLatencyMilliseconds: Double?
 
     let store = MemoStore()
@@ -51,23 +59,22 @@ final class RecorderModel {
     // MARK: - Private
 
     private let engine = RecordingEngine()
-    private let log = Logger(subsystem: "com.franklong.wristmemo", category: "RecorderModel")
+    private let log = SharedConfig.logger("RecorderModel")
 
     private var currentID: UUID?
-    private var armedID: UUID?
     private var startDate: Date?
     private var accumulated: TimeInterval = 0
     private var ticker: Timer?
     private var didDeferredSetup = false
-    private var startRequested = false
     private var interruptedByCall = false
-    private var batteryCheckCounter = 0
+    private var lastBatteryCheck = Date.distantPast
+    /// Not derivable from `phase`: `init` sets `.starting` synchronously, so a
+    /// phase-based guard would reject the very task `init` queues.
     private var startInFlight = false
 
     private init() {
         Latency.mark("model init")
 
-        // Category first: the documented way to keep activation cheap later.
         engine.configureSession()
         engine.onUnexpectedStop = { [weak self] url in
             self?.handleUnexpectedStop(captureURL: url)
@@ -76,38 +83,21 @@ final class RecorderModel {
         permission = Self.currentPermission()
         observeSystemEvents()
 
-        // Claim the launch request here, before any view exists. This is what
-        // makes the recording UI the *first* frame drawn rather than a swap
-        // from the home screen a moment later.
-        claimLaunchRequest()
-        if startRequested, permission == .granted {
-            phase = .starting
-            // Get the session request in flight before SwiftUI takes the main
-            // actor; `startRecording` will await whatever this started.
-            engine.beginActivation()
+        // Claimed here, before any view exists, so the recording UI is the first
+        // frame drawn rather than a swap from the home screen.
+        if RecordingLaunchRequest.consume() {
+            if permission == .granted {
+                phase = .starting
+                engine.beginActivation()
+            }
             Task { await startRecording() }
         }
     }
 
     // MARK: - Launch
 
-    private func claimLaunchRequest() {
-        if RecordingLaunchRequest.consume() { startRequested = true }
-
-        #if DEBUG
-        // The simulator has no Action button, so this is the only way to
-        // exercise the launch-straight-into-recording path there. It feeds the
-        // same flag the control's intent sets, so it tests the real path:
-        //   xcrun simctl launch <sim> com.franklong.wristmemo.watchkitapp -WristMemoAutoRecord YES
-        if UserDefaults.standard.bool(forKey: "WristMemoAutoRecord") {
-            startRequested = true
-        }
-        #endif
-    }
-
-    /// Called from the view's `.task`. Deliberately does nothing that the first
-    /// audio sample depends on — by the time this runs, recording is already
-    /// going in the common case.
+    /// Called from the view's `.task`. Deliberately does nothing the first audio
+    /// sample depends on — recording is already underway in the common case.
     func bootstrap() async {
         handlePendingRequest()
 
@@ -119,59 +109,45 @@ final class RecorderModel {
         WKInterfaceDevice.current().isBatteryMonitoringEnabled = true
         BackgroundWarmth.schedule()
 
-        // Transcoding an orphan can take seconds. It must never sit between a
-        // button press and the microphone opening, which is exactly where it
-        // used to be.
-        let inFlight = Set([engine.captureURL, engine.armedCaptureURL].compactMap { $0 })
-        let recovered = await store.recoverOrphanedCaptures(excluding: inFlight)
+        // Transcoding an orphan can take seconds, so it must never sit between
+        // a button press and the microphone opening.
+        let recovered = await store.recoverOrphanedCaptures(excluding: engine.reservedCaptureURLs)
         recoveredCount = recovered.count
         for memo in recovered { sync.send(memo) }
 
         prearmIfIdle()
     }
 
-    /// Honours a request that arrived while the app was already running.
     private func handlePendingRequest() {
-        claimLaunchRequest()
-        guard startRequested else { return }
-        startRequested = false
-
-        switch permission {
-        case .granted:
-            Task { await startRecording() }
-        case .undetermined:
-            // Keep the request alive across the prompt so the memo starts the
-            // moment the user allows the microphone.
-            startRequested = true
-            Task { await requestPermission() }
-        case .denied:
-            phase = .failed("Microphone access is off.")
-        }
+        guard RecordingLaunchRequest.consume() else { return }
+        Task { await startRecording() }
     }
 
     func handleScenePhase(_ scenePhase: ScenePhase) {
-        switch scenePhase {
-        case .active:
-            permission = Self.currentPermission()
-            handlePendingRequest()
-            prearmIfIdle()
-        case .background:
-            // Recording deliberately continues here; watchOS keeps the audio
-            // session alive for a foreground-started recording. See LIMITATIONS.md.
-            break
-        default:
-            break
-        }
+        guard scenePhase == .active else { return }
+        // Recording deliberately continues in the background; watchOS keeps a
+        // foreground-started session alive. See LIMITATIONS.md.
+        permission = Self.currentPermission()
+        handlePendingRequest()
+        prearmIfIdle()
     }
 
     /// Builds the next recorder while the user is doing nothing, so a press only
     /// has to activate the session and call `record()`.
     private func prearmIfIdle() {
-        guard phase == .idle, permission == .granted, armedID == nil else { return }
-        let id = UUID()
-        guard let url = try? store.newCaptureURL(id: id) else { return }
+        guard phase == .idle, permission == .granted, engine.armedCaptureURL == nil else { return }
+        guard let url = try? store.newCaptureURL(id: UUID()) else { return }
         engine.prearm(url: url)
-        armedID = id
+    }
+
+    /// The pre-armed capture, with its id recovered from the filename so the
+    /// engine stays the single owner of pre-arm state.
+    private var armedCapture: (id: UUID, url: URL)? {
+        guard
+            let url = engine.armedCaptureURL,
+            let id = UUID(uuidString: url.deletingPathExtension().lastPathComponent)
+        else { return nil }
+        return (id, url)
     }
 
     // MARK: - Permission
@@ -184,31 +160,32 @@ final class RecorderModel {
         }
     }
 
-    /// `AVAudioApplication.requestRecordPermission` replaced the deprecated
-    /// `AVAudioSession.requestRecordPermission` in watchOS 10.
-    func requestPermission() async {
+    @discardableResult
+    func requestPermission() async -> Bool {
         let granted = await AVAudioApplication.requestRecordPermission()
         permission = granted ? .granted : .denied
-        if granted, startRequested {
-            startRequested = false
-            await startRecording()
-        } else if !granted {
-            startRequested = false
-            Haptics.failed()
-        }
+        return granted
     }
 
     // MARK: - Transport
 
     func startRecording() async {
-        // `init` and the view's `.task` can both reach here for the same press.
         guard !startInFlight, phase != .recording, phase != .paused else { return }
-        guard permission == .granted else {
-            await requestPermission()
-            return
-        }
         startInFlight = true
         defer { startInFlight = false }
+
+        // Not `||` — the right-hand side of a short-circuit is an autoclosure,
+        // which cannot be async.
+        if permission != .granted {
+            guard await requestPermission() else {
+                Haptics.failed()
+                return
+            }
+        }
+
+        // First real work, and synchronous: the request has to be in flight
+        // before anything else, including the haptic, which is an IPC hop.
+        engine.beginActivation()
 
         Latency.mark("start requested")
         phase = .starting
@@ -217,64 +194,36 @@ final class RecorderModel {
         level = 0
 
         // Fired before the microphone is confirmed open, on purpose. The haptic
-        // is the user's acknowledgement that the press registered, and holding
-        // it back until `record()` returns makes the whole thing feel slower
-        // than it is. A failure haptic follows if it does not work out.
+        // acknowledges the press; holding it back until `record()` returns makes
+        // the whole thing feel slower than it is.
         Haptics.recordingStarted()
 
-        let id: UUID
-        let url: URL
-        if let armedID, let armedURL = engine.armedCaptureURL {
-            id = armedID
-            url = armedURL
+        let capture: (id: UUID, url: URL)
+        if let armedCapture {
+            capture = armedCapture
         } else {
-            id = UUID()
-            guard let fresh = try? store.newCaptureURL(id: id) else {
+            let id = UUID()
+            guard let url = try? store.newCaptureURL(id: id) else {
                 phase = .failed("Couldn't create the recording file.")
                 Haptics.failed()
                 return
             }
-            url = fresh
+            capture = (id, url)
         }
 
         do {
-            try await engine.start(writingTo: url)
-            armedID = nil
-            currentID = id
+            try await engine.start(writingTo: capture.url)
+            currentID = capture.id
             startDate = Date()
             phase = .recording
             lastStartLatencyMilliseconds = Latency.millisecondsSinceLaunch
             startTicker()
-            scheduleDebugAutoStopIfRequested()
+            scheduleDebugAutoStop()
         } catch {
             log.error("Start failed: \(error.localizedDescription, privacy: .public)")
-            armedID = nil
             currentID = nil
             phase = .failed(error.localizedDescription)
             Haptics.failed()
-        }
-    }
-
-    func togglePause() {
-        switch phase {
-        case .recording:
-            engine.pause()
-            accumulated += Date().timeIntervalSince(startDate ?? Date())
-            startDate = nil
-            phase = .paused
-            level = 0
-            Haptics.recordingStopped()
-        case .paused:
-            guard engine.resume() else {
-                phase = .failed("Couldn't resume recording.")
-                Haptics.failed()
-                return
-            }
-            startDate = Date()
-            phase = .recording
-            Haptics.recordingStarted()
-        default:
-            break
         }
     }
 
@@ -291,14 +240,19 @@ final class RecorderModel {
             return
         }
         currentID = nil
-        phase = .saving
+        await commit(captureURL: url, id: id, failureMessage: "That memo was too short to save.")
+    }
 
-        if let memo = await store.finalize(captureURL: url, id: id) {
+    /// The one place a capture becomes a memo. Shared by the normal stop and the
+    /// unexpected-stop path, which must never diverge from it.
+    private func commit(captureURL: URL, id: UUID, failureMessage: String) async {
+        phase = .saving
+        if let memo = await store.finalize(captureURL: captureURL, id: id) {
             sync.send(memo)
             phase = .saved(memo)
             Haptics.saved()
         } else {
-            phase = .failed("That memo was too short to save.")
+            phase = .failed(failureMessage)
             Haptics.failed()
         }
         prearmIfIdle()
@@ -328,17 +282,12 @@ final class RecorderModel {
         Haptics.discarded()
     }
 
-    /// Simulator-only: `-WristMemoAutoStopAfter 5` stops and saves after five
-    /// seconds, so the whole pipeline can be verified without a tap.
-    private func scheduleDebugAutoStopIfRequested() {
-        #if DEBUG
-        let seconds = UserDefaults.standard.double(forKey: "WristMemoAutoStopAfter")
-        guard seconds > 0 else { return }
+    private func scheduleDebugAutoStop() {
+        guard let seconds = DebugOptions.autoStopAfter else { return }
         Task {
             try? await Task.sleep(for: .seconds(seconds))
             await stopAndSave()
         }
-        #endif
     }
 
     // MARK: - Ticker
@@ -359,20 +308,21 @@ final class RecorderModel {
     }
 
     private func tick() {
-        guard phase == .recording else { return }
-        elapsed = accumulated + Date().timeIntervalSince(startDate ?? Date())
-        level = engine.currentLevel()
-
-        batteryCheckCounter += 1
-        if batteryCheckCounter >= 50 {  // ~5 s
-            batteryCheckCounter = 0
+        // Battery is checked on wall-clock, not on a tick count, so the interval
+        // does not silently change with the UI refresh rate.
+        if Date().timeIntervalSince(lastBatteryCheck) >= 5 {
+            lastBatteryCheck = Date()
             checkBattery()
         }
+        guard phase == .recording, let startDate else { return }
+        elapsed = accumulated + Date().timeIntervalSince(startDate)
+        level = engine.currentLevel()
     }
 
     /// The watch powers off before it warns the app, so save early rather than
     /// rely on a termination callback that may never arrive.
     private func checkBattery() {
+        guard phase == .recording || phase == .paused else { return }
         let device = WKInterfaceDevice.current()
         guard device.batteryState != .charging, device.batteryLevel >= 0 else { return }
         if device.batteryLevel <= 0.05 {
@@ -385,38 +335,40 @@ final class RecorderModel {
 
     private func observeSystemEvents() {
         let center = NotificationCenter.default
-
-        center.addObserver(
-            forName: RecordingLaunchRequest.inProcessNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in
-                guard let self else { return }
-                self.startRequested = true
-                self.handlePendingRequest()
-            }
+        // `queue: nil` runs the block inline on the posting thread; each block
+        // already hops to the main actor itself, and `queue: .main` would add a
+        // second run-loop turn to the path that starts recording.
+        center.addObserver(forName: RecordingLaunchRequest.notification, object: nil, queue: nil) { [weak self] _ in
+            Task { @MainActor in self?.handlePendingRequest() }
         }
 
-        center.addObserver(
-            forName: AVAudioSession.interruptionNotification,
-            object: AVAudioSession.sharedInstance(),
-            queue: .main
-        ) { [weak self] note in
+        let session = AVAudioSession.sharedInstance()
+        center.addObserver(forName: AVAudioSession.interruptionNotification, object: session, queue: nil) { [weak self] note in
             Task { @MainActor in self?.handleInterruption(note) }
         }
 
-        center.addObserver(
-            forName: AVAudioSession.mediaServicesWereResetNotification,
-            object: AVAudioSession.sharedInstance(),
-            queue: .main
-        ) { [weak self] _ in
+        center.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification, object: session, queue: nil) { [weak self] _ in
             Task { @MainActor in
                 // The session and recorder are gone; salvage what was written.
                 self?.log.error("Media services reset mid-recording")
                 await self?.stopAndSave()
             }
         }
+    }
+
+    private func pauseTransport() {
+        engine.pause()
+        accumulated += Date().timeIntervalSince(startDate ?? Date())
+        startDate = nil
+        phase = .paused
+        level = 0
+    }
+
+    private func resumeTransport() -> Bool {
+        guard engine.resume() else { return false }
+        startDate = Date()
+        phase = .recording
+        return true
     }
 
     /// A phone call or Siri takes the microphone away. Pause rather than stop,
@@ -431,11 +383,7 @@ final class RecorderModel {
         case .began:
             guard phase == .recording else { return }
             interruptedByCall = true
-            engine.pause()
-            accumulated += Date().timeIntervalSince(startDate ?? Date())
-            startDate = nil
-            phase = .paused
-            level = 0
+            pauseTransport()
 
         case .ended:
             guard interruptedByCall, phase == .paused else { return }
@@ -443,10 +391,7 @@ final class RecorderModel {
             let options = (note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt).map {
                 AVAudioSession.InterruptionOptions(rawValue: $0)
             }
-            if options?.contains(.shouldResume) == true, engine.resume() {
-                startDate = Date()
-                phase = .recording
-            } else {
+            if options?.contains(.shouldResume) != true || !resumeTransport() {
                 // Can't get the microphone back — keep what was captured.
                 Task { await stopAndSave() }
             }
@@ -465,16 +410,6 @@ final class RecorderModel {
             return
         }
         currentID = nil
-        phase = .saving
-        Task {
-            if let memo = await store.finalize(captureURL: captureURL, id: id, recovered: true) {
-                sync.send(memo)
-                phase = .saved(memo)
-                Haptics.saved()
-            } else {
-                phase = .failed("Recording stopped unexpectedly.")
-                Haptics.failed()
-            }
-        }
+        Task { await commit(captureURL: captureURL, id: id, failureMessage: "Recording stopped unexpectedly.") }
     }
 }

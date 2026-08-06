@@ -38,21 +38,14 @@ struct LibraryView: View {
                     .foregroundStyle(.red)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(item.receivedAt, format: .dateTime.month(.abbreviated).day().hour().minute())
+                    Text(item.recordedAt, format: .dateTime.month(.abbreviated).day().hour().minute())
                         .font(.body)
-                    Text(item.duration.memoDuration)
+                    Text(item.duration.memoClock)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
         }
         .buttonStyle(.plain)
-    }
-}
-
-extension TimeInterval {
-    var memoDuration: String {
-        let total = Int(rounded())
-        return String(format: "%d:%02d", total / 60, total % 60)
     }
 }

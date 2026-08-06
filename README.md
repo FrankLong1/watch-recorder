@@ -73,13 +73,7 @@ xcodebuild -project WristMemo.xcodeproj -target "WristMemo Watch App" \
 | `WristMemo Watch App` | watchOS 26 | Recording app |
 | `WristMemoControls` | watchOS 26 | Control extension (the Action button entry point) |
 
-### App Group
-
-`group.com.franklong.wristmemo` is only a cross-process fallback for the launch
-hand-off, and it is **off by default** — a free/personal Apple ID team cannot
-provision App Groups, and the in-process path is what actually carries the
-request. With a paid membership, add `CODE_SIGN_ENTITLEMENTS =
-Config/Watch{App,Controls}.entitlements` back to the two watch targets.
+### Signing
 
 Bundle identifiers are `com.franklong.wristmemo*` and signing uses Team
 `44X645LJ6H`. Change both if you are building under a different account.
@@ -97,5 +91,5 @@ Shared/          intent + hand-off, compiled into both watch targets
 WatchControls/   the ControlWidget
 WatchApp/        recorder, storage, sync, SwiftUI
 iOSApp/          companion library
-Config/          Info.plists and entitlements
+Config/          Info.plists
 ```

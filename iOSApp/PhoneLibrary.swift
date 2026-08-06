@@ -1,7 +1,6 @@
 import AVFoundation
 import Foundation
 import WatchConnectivity
-import os
 
 /// Receives memos from the watch and plays them back.
 @MainActor
@@ -11,21 +10,29 @@ final class PhoneLibrary: NSObject {
     struct Item: Identifiable, Equatable {
         let id: UUID
         let url: URL
-        let receivedAt: Date
+        let recordedAt: Date
+        let duration: TimeInterval
+    }
+
+    /// What the watch sends alongside the audio, written next to each file so
+    /// the phone never has to open an AAC file just to learn its duration.
+    private struct Sidecar: Codable {
+        let recordedAt: Date
         let duration: TimeInterval
     }
 
     private(set) var items: [Item] = []
     private(set) var playingID: UUID?
 
-    private let log = Logger(subsystem: "com.franklong.wristmemo", category: "PhoneLibrary")
-    private let fileManager = FileManager.default
+    private let log = SharedConfig.logger("PhoneLibrary")
     private var player: AVAudioPlayer?
 
-    private lazy var directory: URL = {
-        let base = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    /// `nonisolated` because `session(_:didReceive:)` has to move the inbox file
+    /// before it returns, and cannot hop to the main actor to look up a path.
+    nonisolated static let memosDirectory: URL = {
+        let base = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let url = base.appendingPathComponent("Memos", isDirectory: true)
-        try? fileManager.createDirectory(at: url, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
     }()
 
@@ -37,25 +44,35 @@ final class PhoneLibrary: NSObject {
     }
 
     private func reload() {
+        let fileManager = FileManager.default
         let urls = (try? fileManager.contentsOfDirectory(
-            at: directory,
+            at: Self.memosDirectory,
             includingPropertiesForKeys: [.creationDateKey]
         )) ?? []
 
         items = urls
             .filter { ["m4a", "caf"].contains($0.pathExtension) }
             .map { url in
-                let values = try? url.resourceValues(forKeys: [.creationDateKey])
-                let asset = try? AVAudioFile(forReading: url)
-                let duration = asset.map { Double($0.length) / $0.fileFormat.sampleRate } ?? 0
+                let sidecar = Self.readSidecar(for: url)
+                let created = try? url.resourceValues(forKeys: [.creationDateKey]).creationDate
                 return Item(
                     id: UUID(uuidString: url.deletingPathExtension().lastPathComponent) ?? UUID(),
                     url: url,
-                    receivedAt: values?.creationDate ?? Date(),
-                    duration: duration
+                    recordedAt: sidecar?.recordedAt ?? created ?? Date(),
+                    // Only decodes for a memo that arrived without metadata.
+                    duration: sidecar?.duration ?? AudioDuration.of(url)
                 )
             }
-            .sorted { $0.receivedAt > $1.receivedAt }
+            .sorted { $0.recordedAt > $1.recordedAt }
+    }
+
+    private nonisolated static func sidecarURL(for audio: URL) -> URL {
+        audio.deletingPathExtension().appendingPathExtension("json")
+    }
+
+    private nonisolated static func readSidecar(for audio: URL) -> Sidecar? {
+        guard let data = try? Data(contentsOf: sidecarURL(for: audio)) else { return nil }
+        return try? JSONDecoder().decode(Sidecar.self, from: data)
     }
 
     // MARK: - Playback
@@ -86,7 +103,8 @@ final class PhoneLibrary: NSObject {
 
     func delete(_ item: Item) {
         if playingID == item.id { stop() }
-        try? fileManager.removeItem(at: item.url)
+        try? FileManager.default.removeItem(at: item.url)
+        try? FileManager.default.removeItem(at: Self.sidecarURL(for: item.url))
         items.removeAll { $0.id == item.id }
     }
 }
@@ -115,21 +133,25 @@ extension PhoneLibrary: WCSessionDelegate {
     nonisolated func session(_ session: WCSession, didReceive file: WCSessionFile) {
         // The inbox copy is deleted as soon as this returns, so move it now
         // rather than on a hop to the main actor.
-        let destination = inboxDestination(for: file)
+        let metadata = file.metadata
+        let name = (metadata?["id"] as? String) ?? UUID().uuidString
+        let destination = Self.memosDirectory
+            .appendingPathComponent(name)
+            .appendingPathExtension(file.fileURL.pathExtension)
+
         try? FileManager.default.removeItem(at: destination)
         do {
             try FileManager.default.moveItem(at: file.fileURL, to: destination)
         } catch {
             try? FileManager.default.copyItem(at: file.fileURL, to: destination)
         }
-        Task { @MainActor [weak self] in self?.reload() }
-    }
 
-    private nonisolated func inboxDestination(for file: WCSessionFile) -> URL {
-        let base = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Memos", isDirectory: true)
-        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        let name = (file.metadata?["id"] as? String) ?? UUID().uuidString
-        return base.appendingPathComponent(name).appendingPathExtension(file.fileURL.pathExtension)
+        if let recordedAt = metadata?["createdAt"] as? TimeInterval,
+           let duration = metadata?["duration"] as? TimeInterval {
+            let sidecar = Sidecar(recordedAt: Date(timeIntervalSince1970: recordedAt), duration: duration)
+            try? JSONEncoder().encode(sidecar).write(to: Self.sidecarURL(for: destination), options: .atomic)
+        }
+
+        Task { @MainActor [weak self] in self?.reload() }
     }
 }

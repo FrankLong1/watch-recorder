@@ -10,6 +10,9 @@
 		A06D7DAD745C123643EA2AF8 /* WristMemoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2485CEB2051BDEF12B42AF21 /* WristMemoApp.swift */; };
 		3D2079B042B68CAAF76E7776 /* PhoneLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FE33FF418EC40F4790A1578 /* PhoneLibrary.swift */; };
 		C599E4D892EA74E5FAB80AB5 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FF4F345E89E8DB8E583DC96 /* LibraryView.swift */; };
+		D0694CC41CABB3130B7B85BA /* SharedConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A0075E4CFD286E9FE8E7D55 /* SharedConfig.swift */; };
+		00A403245E70C13BE6B24EB8 /* Formatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11AEF845835EE62EA196738 /* Formatting.swift */; };
+		2E8E95D0F1B313CEDEC8A8C3 /* AudioDuration.swift in Sources */ = {isa = PBXBuildFile; fileRef = C264870A06619121DFC7D192 /* AudioDuration.swift */; };
 		556406146F9926C1B4496A04 /* WristMemoWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CE93DA78512CAEA42DBEE5B /* WristMemoWatchApp.swift */; };
 		958BE9E4373164A3CCA0BEEE /* RecorderModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7591B32180C3ACA7897C76F6 /* RecorderModel.swift */; };
 		8BC04F80A58FF7F2AABD5DD0 /* RecordingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9636ABE0F73C0A620F2F5F18 /* RecordingEngine.swift */; };
@@ -29,12 +32,16 @@
 		DE51A314E6BE0A3721677BCD /* SharedConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A0075E4CFD286E9FE8E7D55 /* SharedConfig.swift */; };
 		4D4237B97C00B6636F2184C8 /* RecordingLaunchRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED80ABA31146DD29FA932AD8 /* RecordingLaunchRequest.swift */; };
 		08F4DB2347CB4D295A0C04A8 /* StartRecordingIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 689CF9FA680CBDFB7F9D75AC /* StartRecordingIntent.swift */; };
+		508E7FDF4FA31611C54CBB58 /* Formatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11AEF845835EE62EA196738 /* Formatting.swift */; };
+		E376404D7AB6D5938682C429 /* AudioDuration.swift in Sources */ = {isa = PBXBuildFile; fileRef = C264870A06619121DFC7D192 /* AudioDuration.swift */; };
 		90AC0C21AE4BB7CC36E16120 /* ControlsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F424B12DE56E9CAD6F4DE5 /* ControlsBundle.swift */; };
 		6DC7C8D5DF8BCE1F550DB1DD /* StartRecordingControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 149D488601AE102967EB70A4 /* StartRecordingControl.swift */; };
 		6AE6462E492BF876F118B903 /* RecordComplication.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6611803E2A2D98328D042CA9 /* RecordComplication.swift */; };
 		6C2B0A927FEFE95F323931CF /* SharedConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A0075E4CFD286E9FE8E7D55 /* SharedConfig.swift */; };
 		DA760E8063D8F46C1EE1984D /* RecordingLaunchRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED80ABA31146DD29FA932AD8 /* RecordingLaunchRequest.swift */; };
 		F5AA306BB4BDC8B76812D9D1 /* StartRecordingIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 689CF9FA680CBDFB7F9D75AC /* StartRecordingIntent.swift */; };
+		1B6BFBE1179736B42CC023D0 /* Formatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11AEF845835EE62EA196738 /* Formatting.swift */; };
+		60C115C11C175C1B155B8C61 /* AudioDuration.swift in Sources */ = {isa = PBXBuildFile; fileRef = C264870A06619121DFC7D192 /* AudioDuration.swift */; };
 		D6977DAF5EE77F389F1CFFF9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3C356518F3C752185B32433B /* Assets.xcassets */; };
 		59D2E924883C3F75135DAFBA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 087FC6EE93EAFFBD66585871 /* Assets.xcassets */; };
 		51E14069787F965942359172 /* WristMemoControls.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 6249C2783F0DC1188AF10FD6 /* WristMemoControls.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -87,6 +94,8 @@
 		3A0075E4CFD286E9FE8E7D55 /* SharedConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SharedConfig.swift"; sourceTree = "<group>"; };
 		ED80ABA31146DD29FA932AD8 /* RecordingLaunchRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RecordingLaunchRequest.swift"; sourceTree = "<group>"; };
 		689CF9FA680CBDFB7F9D75AC /* StartRecordingIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StartRecordingIntent.swift"; sourceTree = "<group>"; };
+		F11AEF845835EE62EA196738 /* Formatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Formatting.swift"; sourceTree = "<group>"; };
+		C264870A06619121DFC7D192 /* AudioDuration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AudioDuration.swift"; sourceTree = "<group>"; };
 		5CE93DA78512CAEA42DBEE5B /* WristMemoWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WristMemoWatchApp.swift"; sourceTree = "<group>"; };
 		7591B32180C3ACA7897C76F6 /* RecorderModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RecorderModel.swift"; sourceTree = "<group>"; };
 		9636ABE0F73C0A620F2F5F18 /* RecordingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RecordingEngine.swift"; sourceTree = "<group>"; };
@@ -112,9 +121,7 @@
 		7FF4F345E89E8DB8E583DC96 /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LibraryView.swift"; sourceTree = "<group>"; };
 		3C356518F3C752185B32433B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Assets.xcassets"; sourceTree = "<group>"; };
 		21C71F4B374B671FF62278CB /* WatchApp-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "WatchApp-Info.plist"; sourceTree = "<group>"; };
-		636CCEAF8B862F44208A3C02 /* WatchApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "WatchApp.entitlements"; sourceTree = "<group>"; };
 		5040D7F4DAC8100693F8784A /* WatchControls-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "WatchControls-Info.plist"; sourceTree = "<group>"; };
-		CD819A1E2C00F9D53A559C27 /* WatchControls.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "WatchControls.entitlements"; sourceTree = "<group>"; };
 		2A993087E3E52FF396FE5E3A /* iOSApp-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "iOSApp-Info.plist"; sourceTree = "<group>"; };
 		B66BCDC810D3FCEA23D284EF /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "README.md"; sourceTree = "<group>"; };
 		6D693E0FFF8AA9931D983AE7 /* DESIGN.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "DESIGN.md"; sourceTree = "<group>"; };
@@ -170,6 +177,8 @@
 				3A0075E4CFD286E9FE8E7D55 /* SharedConfig.swift */,
 				ED80ABA31146DD29FA932AD8 /* RecordingLaunchRequest.swift */,
 				689CF9FA680CBDFB7F9D75AC /* StartRecordingIntent.swift */,
+				F11AEF845835EE62EA196738 /* Formatting.swift */,
+				C264870A06619121DFC7D192 /* AudioDuration.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -231,9 +240,7 @@
 			isa = PBXGroup;
 			children = (
 				21C71F4B374B671FF62278CB /* WatchApp-Info.plist */,
-				636CCEAF8B862F44208A3C02 /* WatchApp.entitlements */,
 				5040D7F4DAC8100693F8784A /* WatchControls-Info.plist */,
-				CD819A1E2C00F9D53A559C27 /* WatchControls.entitlements */,
 				2A993087E3E52FF396FE5E3A /* iOSApp-Info.plist */,
 			);
 			path = Config;
@@ -394,6 +401,9 @@
 				A06D7DAD745C123643EA2AF8 /* WristMemoApp.swift in Sources */,
 				3D2079B042B68CAAF76E7776 /* PhoneLibrary.swift in Sources */,
 				C599E4D892EA74E5FAB80AB5 /* LibraryView.swift in Sources */,
+				D0694CC41CABB3130B7B85BA /* SharedConfig.swift in Sources */,
+				00A403245E70C13BE6B24EB8 /* Formatting.swift in Sources */,
+				2E8E95D0F1B313CEDEC8A8C3 /* AudioDuration.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -420,6 +430,8 @@
 				DE51A314E6BE0A3721677BCD /* SharedConfig.swift in Sources */,
 				4D4237B97C00B6636F2184C8 /* RecordingLaunchRequest.swift in Sources */,
 				08F4DB2347CB4D295A0C04A8 /* StartRecordingIntent.swift in Sources */,
+				508E7FDF4FA31611C54CBB58 /* Formatting.swift in Sources */,
+				E376404D7AB6D5938682C429 /* AudioDuration.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -433,6 +445,8 @@
 				6C2B0A927FEFE95F323931CF /* SharedConfig.swift in Sources */,
 				DA760E8063D8F46C1EE1984D /* RecordingLaunchRequest.swift in Sources */,
 				F5AA306BB4BDC8B76812D9D1 /* StartRecordingIntent.swift in Sources */,
+				1B6BFBE1179736B42CC023D0 /* Formatting.swift in Sources */,
+				60C115C11C175C1B155B8C61 /* AudioDuration.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
