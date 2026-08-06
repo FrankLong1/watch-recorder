@@ -14,11 +14,13 @@ final class MemoStore {
 
     private(set) var memos: [Memo] = []
 
-    private let log = Logger(subsystem: "com.wristmemo.app", category: "MemoStore")
+    private let log = Logger(subsystem: "com.franklong.wristmemo", category: "MemoStore")
     private let fileManager = FileManager.default
 
-    private lazy var root: URL = {
-        let base = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    // A stored `let`, not a `lazy var`: @Observable synthesises an init
+    // accessor for every stored `var`, and it cannot do that for a lazy one.
+    private let root: URL = {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return base.appendingPathComponent("WristMemo", isDirectory: true)
     }()
 

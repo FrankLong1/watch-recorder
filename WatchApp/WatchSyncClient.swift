@@ -12,7 +12,7 @@ import os
 @Observable
 final class WatchSyncClient: NSObject {
 
-    private let log = Logger(subsystem: "com.wristmemo.app", category: "Sync")
+    private let log = Logger(subsystem: "com.franklong.wristmemo", category: "Sync")
     private weak var store: MemoStore?
     private var session: WCSession? { WCSession.isSupported() ? WCSession.default : nil }
 

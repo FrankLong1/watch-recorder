@@ -19,7 +19,7 @@ import Foundation
 enum RecordingLaunchRequest {
 
     /// Posted when the intent runs inside the app's own process.
-    static let inProcessNotification = Notification.Name("com.wristmemo.startRecordingRequested")
+    static let inProcessNotification = Notification.Name("com.franklong.wristmemo.startRecordingRequested")
 
     /// Requests older than this are ignored. Without an age limit, opening the
     /// app days later from the app grid would start an unwanted recording

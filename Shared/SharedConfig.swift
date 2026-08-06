@@ -11,15 +11,19 @@ enum SharedConfig {
     ///
     /// The group is a *fallback* path only. When `StartRecordingIntent` runs in
     /// foreground mode the system performs it inside the app itself, and the
-    /// in-process notification is what actually triggers recording. If you do
-    /// not want to provision an App Group, delete the entitlement and the app
-    /// still works — see ARCHITECTURE.md, "Hand-off".
-    static let appGroupIdentifier = "group.com.wristmemo.shared"
+    /// in-process notification is what actually triggers recording.
+    ///
+    /// It is **off by default**: a free (personal) Apple ID team cannot
+    /// provision App Groups, so leaving the entitlement on would break device
+    /// builds for anyone without a paid membership. Without it
+    /// `sharedDefaults` is nil and the in-process path carries the request.
+    /// See DESIGN.md, "Hand-off between processes".
+    static let appGroupIdentifier = "group.com.franklong.wristmemo"
 
     /// Stable identity for the control. Changing this after shipping detaches
     /// the control from any Action button or Control Center slot the user has
     /// already configured, so treat it as permanent.
-    static let recordControlKind = "com.wristmemo.control.start-recording"
+    static let recordControlKind = "com.franklong.wristmemo.control.start-recording"
 
     static var sharedDefaults: UserDefaults? {
         UserDefaults(suiteName: appGroupIdentifier)

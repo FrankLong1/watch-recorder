@@ -44,7 +44,7 @@ final class RecorderModel {
     // MARK: - Private
 
     private let engine = RecordingEngine()
-    private let log = Logger(subsystem: "com.wristmemo.app", category: "RecorderModel")
+    private let log = Logger(subsystem: "com.franklong.wristmemo", category: "RecorderModel")
 
     private var currentID: UUID?
     private var startDate: Date?
@@ -68,6 +68,17 @@ final class RecorderModel {
             return
         }
         isBootstrapped = true
+
+        #if DEBUG
+        // The simulator has no Action button, so this is the only way to
+        // exercise the launch-straight-into-recording path there. It feeds the
+        // same `startRequested` flag the control's intent sets, so it tests the
+        // real code path rather than a parallel one:
+        //   xcrun simctl launch <sim> com.franklong.wristmemo.watchkitapp -WristMemoAutoRecord YES
+        if UserDefaults.standard.bool(forKey: "WristMemoAutoRecord") {
+            startRequested = true
+        }
+        #endif
 
         // Configure the audio category before anything else: it costs nothing
         // and removes a step from the critical path when recording starts.

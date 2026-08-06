@@ -18,7 +18,7 @@ final class PhoneLibrary: NSObject {
     private(set) var items: [Item] = []
     private(set) var playingID: UUID?
 
-    private let log = Logger(subsystem: "com.wristmemo.app", category: "PhoneLibrary")
+    private let log = Logger(subsystem: "com.franklong.wristmemo", category: "PhoneLibrary")
     private let fileManager = FileManager.default
     private var player: AVAudioPlayer?
 

@@ -3,12 +3,12 @@
 <plist version="1.0">
 <dict>
 	<!-- Optional. Only used for the cross-process hand-off fallback described
-	     in ARCHITECTURE.md. Remove this file from the target's
+	     in DESIGN.md. Add this file back to the target's
 	     CODE_SIGN_ENTITLEMENTS setting if you would rather not provision a
 	     group; the app still starts recording via the in-process path. -->
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.com.wristmemo.shared</string>
+		<string>group.com.franklong.wristmemo</string>
 	</array>
 </dict>
 </plist>

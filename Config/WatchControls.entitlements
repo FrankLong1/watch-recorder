@@ -4,7 +4,7 @@
 <dict>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.com.wristmemo.shared</string>
+		<string>group.com.franklong.wristmemo</string>
 	</array>
 </dict>
 </plist>

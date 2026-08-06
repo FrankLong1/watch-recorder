@@ -12,7 +12,7 @@
 	<true/>
 
 	<key>WKCompanionAppBundleIdentifier</key>
-	<string>com.wristmemo.app</string>
+	<string>com.franklong.wristmemo</string>
 
 	<!-- Lets a recording that STARTED in the foreground keep running when the
 	     user drops their wrist. watchOS will not let an app start audio from

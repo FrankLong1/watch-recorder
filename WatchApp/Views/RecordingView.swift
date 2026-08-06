@@ -22,7 +22,7 @@ struct RecordingView: View {
             RecordingDot(isAnimating: !isPaused)
             Text(isPaused ? "PAUSED" : "RECORDING")
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(isPaused ? .secondary : .red)
+                .foregroundStyle(isPaused ? Color.secondary : Color.red)
                 .monospaced()
         }
     }

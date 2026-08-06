@@ -7,10 +7,13 @@ the only supported way for third-party code to own the Action button.
 
 ## Status
 
-Draft. Compiles clean against the watchOS 26.5 SDK (Xcode 26.6) with no errors
-or warnings. **Not yet run on hardware** — the machine it was built on has no
-watchOS simulator runtime installed, so the timing and Action button behaviour
-still need a device pass. See [Verifying on hardware](#verifying-on-hardware).
+Draft, and **running**. Verified on the Apple Watch Ultra 3 simulator
+(watchOS 26.5): launches straight into recording, live timer and meter, and
+crash recovery reconstructs a valid AAC memo from a hard-killed session.
+
+Not yet on real hardware — the Action button itself has no simulator
+equivalent, so press-to-record latency and control assignment still need an
+Ultra. Setup and the remaining checklist: [DEVICE_TESTING.md](DEVICE_TESTING.md).
 
 ## What happens on a press
 
@@ -50,7 +53,8 @@ WristMemo" or add the Shortcuts action.
 open WristMemo.xcodeproj
 ```
 
-Set your team on all three targets, then run the **WristMemo Watch App** scheme.
+Signing is already configured (Team `44X645LJ6H`); run the
+**WristMemo Watch App** scheme.
 
 Command line, without signing:
 
@@ -79,16 +83,9 @@ running on a device.
 
 ## Verifying on hardware
 
-The parts that need a real Ultra:
-
-- [ ] Control appears under Settings › Action Button
-- [ ] Press launches straight into the recording screen
-- [ ] Time from press to first audio sample feels instant
-- [ ] First-run microphone prompt, then auto-start after granting
-- [ ] Recording survives a wrist drop (`WKBackgroundModes: audio`)
-- [ ] Incoming call pauses and resumes cleanly
-- [ ] Force-quit mid-recording → memo recovered on next launch
-- [ ] Memo arrives on the paired iPhone
+See [DEVICE_TESTING.md](DEVICE_TESTING.md) — it covers the Mac setup that is
+already done, the Developer Mode / pairing steps that need your hardware, and
+what remains unverified.
 
 ## Layout
 

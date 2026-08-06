@@ -35,7 +35,7 @@ final class RecordingEngine: NSObject {
         AVLinearPCMIsBigEndianKey: false
     ]
 
-    private let log = Logger(subsystem: "com.wristmemo.app", category: "RecordingEngine")
+    private let log = Logger(subsystem: "com.franklong.wristmemo", category: "RecordingEngine")
     private var recorder: AVAudioRecorder?
 
     private(set) var captureURL: URL?

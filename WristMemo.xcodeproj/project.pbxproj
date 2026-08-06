@@ -352,7 +352,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F14B288A56497EDEEC9CD972 /* Assets.xcassets in Resources */,
+				D6977DAF5EE77F389F1CFFF9 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -360,7 +360,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				D0E7307132FC902663FFC359 /* Assets.xcassets in Resources */,
+				59D2E924883C3F75135DAFBA /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -378,9 +378,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				599F507023934F71BE8B2E3C /* WristMemoApp.swift in Sources */,
-				A69B83E2C3873F3581F30580 /* PhoneLibrary.swift in Sources */,
-				86F0C051283F4C89CA72353E /* LibraryView.swift in Sources */,
+				A06D7DAD745C123643EA2AF8 /* WristMemoApp.swift in Sources */,
+				3D2079B042B68CAAF76E7776 /* PhoneLibrary.swift in Sources */,
+				C599E4D892EA74E5FAB80AB5 /* LibraryView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -388,23 +388,23 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				92EDCF5E39505E567E03ACF9 /* WristMemoWatchApp.swift in Sources */,
-				9ECD8E15E3FB15B79BB73DE3 /* RecorderModel.swift in Sources */,
-				E35FBD9CAC58517FFDC881DC /* RecordingEngine.swift in Sources */,
-				1F7BC69593A44D67B310B345 /* AudioCompressor.swift in Sources */,
-				E197E2B561CC11E2A5673803 /* Memo.swift in Sources */,
-				15E66016E41F5EF30FA95578 /* MemoStore.swift in Sources */,
-				76FE00D45A8954634D63CCB8 /* WatchSyncClient.swift in Sources */,
-				178A3983E55BC551A60DEECA /* Haptics.swift in Sources */,
-				86482B01D52896D50457DEBB /* WristMemoShortcuts.swift in Sources */,
-				F19A498839D222BB643B4C0B /* RootView.swift in Sources */,
-				43F8BF95842F94F8E179667C /* RecordingView.swift in Sources */,
-				A678DF942984E72E6C33DBCB /* HomeView.swift in Sources */,
-				65E5151B8770A1E79D0208BB /* PermissionView.swift in Sources */,
-				3DF7B8FE191858317B2565D3 /* ResultViews.swift in Sources */,
-				C05E50E6888982B44D3452EC /* SharedConfig.swift in Sources */,
-				919D7DEA3C85970937C29F99 /* RecordingLaunchRequest.swift in Sources */,
-				A5E7DDDDA7C44DDF6F17E6B3 /* StartRecordingIntent.swift in Sources */,
+				556406146F9926C1B4496A04 /* WristMemoWatchApp.swift in Sources */,
+				958BE9E4373164A3CCA0BEEE /* RecorderModel.swift in Sources */,
+				8BC04F80A58FF7F2AABD5DD0 /* RecordingEngine.swift in Sources */,
+				C83A9F6228B077FEF7FABA83 /* AudioCompressor.swift in Sources */,
+				36161C361AA213B25BC1BA9D /* Memo.swift in Sources */,
+				051844B06F859FBFE85BC34D /* MemoStore.swift in Sources */,
+				60649AE238BFC7F2C4EB9E7C /* WatchSyncClient.swift in Sources */,
+				0A21CF637F7528669B436C47 /* Haptics.swift in Sources */,
+				E150BA263B42FD92EBA622D7 /* WristMemoShortcuts.swift in Sources */,
+				D0B4201C2391811C86476E29 /* RootView.swift in Sources */,
+				6BADECA4CB17F1337F041EF8 /* RecordingView.swift in Sources */,
+				FED079510C435EFC6D529F84 /* HomeView.swift in Sources */,
+				8D3841290D60BFDC0A8E8307 /* PermissionView.swift in Sources */,
+				33BF8CC737DB16483EA5D1FF /* ResultViews.swift in Sources */,
+				DE51A314E6BE0A3721677BCD /* SharedConfig.swift in Sources */,
+				4D4237B97C00B6636F2184C8 /* RecordingLaunchRequest.swift in Sources */,
+				08F4DB2347CB4D295A0C04A8 /* StartRecordingIntent.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -412,11 +412,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				574A354C96955C0D9269AD34 /* ControlsBundle.swift in Sources */,
-				1C58158C22572E6553DF0111 /* StartRecordingControl.swift in Sources */,
-				4207A912880FD3CAFFE89512 /* SharedConfig.swift in Sources */,
-				B3171D88BD0CC07D9DE9268A /* RecordingLaunchRequest.swift in Sources */,
-				980E73B1C96C45CF7C2AAABB /* StartRecordingIntent.swift in Sources */,
+				90AC0C21AE4BB7CC36E16120 /* ControlsBundle.swift in Sources */,
+				6DC7C8D5DF8BCE1F550DB1DD /* StartRecordingControl.swift in Sources */,
+				6C2B0A927FEFE95F323931CF /* SharedConfig.swift in Sources */,
+				DA760E8063D8F46C1EE1984D /* RecordingLaunchRequest.swift in Sources */,
+				F5AA306BB4BDC8B76812D9D1 /* StartRecordingIntent.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -447,6 +447,7 @@
 				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 44X645LJ6H;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -474,6 +475,7 @@
 				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 44X645LJ6H;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -501,7 +503,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", );
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.wristmemo.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.franklong.wristmemo;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -523,7 +525,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", );
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.wristmemo.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.franklong.wristmemo;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -536,7 +538,6 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = "Config/WatchApp.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -544,7 +545,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = WristMemo;
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", );
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.wristmemo.app.watchkitapp";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.franklong.wristmemo.watchkitapp";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -559,7 +560,6 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = "Config/WatchApp.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -567,7 +567,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = WristMemo;
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", );
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.wristmemo.app.watchkitapp";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.franklong.wristmemo.watchkitapp";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -580,7 +580,6 @@
 		9BF6B591DA35C1B21FEFB5DD /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = "Config/WatchControls.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -588,7 +587,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "WristMemo Controls";
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks", );
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.wristmemo.app.watchkitapp.controls";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.franklong.wristmemo.watchkitapp.controls";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -601,7 +600,6 @@
 		A18BB468EC0CEDFDF9488DB1 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = "Config/WatchControls.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -609,7 +607,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "WristMemo Controls";
 				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks", );
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.wristmemo.app.watchkitapp.controls";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.franklong.wristmemo.watchkitapp.controls";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
