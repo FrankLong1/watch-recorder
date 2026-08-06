@@ -111,6 +111,10 @@ fi
 xcrun simctl bootstatus "$SIM" -b >/dev/null 2>&1 || die "Simulator never finished booting."
 
 # --- build ---------------------------------------------------------------------
+# `build/` is gitignored, so it does not exist in a fresh clone. Everything below
+# writes logs and derived data there.
+mkdir -p "$(dirname "$DD")"
+
 if (( DO_BUILD )); then
     bold "Building…"
     # build-for-testing so --repeat and the test bundles reuse one build.
