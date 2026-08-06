@@ -1,0 +1,664 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 60;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A06D7DAD745C123643EA2AF8 /* WristMemoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2485CEB2051BDEF12B42AF21 /* WristMemoApp.swift */; };
+		3D2079B042B68CAAF76E7776 /* PhoneLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FE33FF418EC40F4790A1578 /* PhoneLibrary.swift */; };
+		C599E4D892EA74E5FAB80AB5 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FF4F345E89E8DB8E583DC96 /* LibraryView.swift */; };
+		556406146F9926C1B4496A04 /* WristMemoWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CE93DA78512CAEA42DBEE5B /* WristMemoWatchApp.swift */; };
+		958BE9E4373164A3CCA0BEEE /* RecorderModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7591B32180C3ACA7897C76F6 /* RecorderModel.swift */; };
+		8BC04F80A58FF7F2AABD5DD0 /* RecordingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9636ABE0F73C0A620F2F5F18 /* RecordingEngine.swift */; };
+		C83A9F6228B077FEF7FABA83 /* AudioCompressor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7567CDB7BBFB1C0F2E916475 /* AudioCompressor.swift */; };
+		36161C361AA213B25BC1BA9D /* Memo.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6D4D2B86FC1E24980761A25 /* Memo.swift */; };
+		051844B06F859FBFE85BC34D /* MemoStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B7E5BAF41C022ED29C69870 /* MemoStore.swift */; };
+		60649AE238BFC7F2C4EB9E7C /* WatchSyncClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 796A3395BAC882FAE5DD6938 /* WatchSyncClient.swift */; };
+		0A21CF637F7528669B436C47 /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C09AB83111313DD5AD3F8B26 /* Haptics.swift */; };
+		E150BA263B42FD92EBA622D7 /* WristMemoShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F65A747EC963F2F4CD5E5E9 /* WristMemoShortcuts.swift */; };
+		D0B4201C2391811C86476E29 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32803F96509DBEDEB9BE8B7B /* RootView.swift */; };
+		6BADECA4CB17F1337F041EF8 /* RecordingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D217F2ED7DCF130FCCDF1377 /* RecordingView.swift */; };
+		FED079510C435EFC6D529F84 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E51D2F88B7230D114D08F72 /* HomeView.swift */; };
+		8D3841290D60BFDC0A8E8307 /* PermissionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99F644AB75812F8E61AADBC2 /* PermissionView.swift */; };
+		33BF8CC737DB16483EA5D1FF /* ResultViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9CA24DBB326CC0D27A858EF /* ResultViews.swift */; };
+		DE51A314E6BE0A3721677BCD /* SharedConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A0075E4CFD286E9FE8E7D55 /* SharedConfig.swift */; };
+		4D4237B97C00B6636F2184C8 /* RecordingLaunchRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED80ABA31146DD29FA932AD8 /* RecordingLaunchRequest.swift */; };
+		08F4DB2347CB4D295A0C04A8 /* StartRecordingIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 689CF9FA680CBDFB7F9D75AC /* StartRecordingIntent.swift */; };
+		90AC0C21AE4BB7CC36E16120 /* ControlsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F424B12DE56E9CAD6F4DE5 /* ControlsBundle.swift */; };
+		6DC7C8D5DF8BCE1F550DB1DD /* StartRecordingControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 149D488601AE102967EB70A4 /* StartRecordingControl.swift */; };
+		6C2B0A927FEFE95F323931CF /* SharedConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A0075E4CFD286E9FE8E7D55 /* SharedConfig.swift */; };
+		DA760E8063D8F46C1EE1984D /* RecordingLaunchRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED80ABA31146DD29FA932AD8 /* RecordingLaunchRequest.swift */; };
+		F5AA306BB4BDC8B76812D9D1 /* StartRecordingIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 689CF9FA680CBDFB7F9D75AC /* StartRecordingIntent.swift */; };
+		D6977DAF5EE77F389F1CFFF9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3C356518F3C752185B32433B /* Assets.xcassets */; };
+		59D2E924883C3F75135DAFBA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 087FC6EE93EAFFBD66585871 /* Assets.xcassets */; };
+		51E14069787F965942359172 /* WristMemoControls.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 6249C2783F0DC1188AF10FD6 /* WristMemoControls.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		7395CD3B076723358C708BE0 /* WristMemo Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = ABB217AE039EB9EFED5B9F29 /* WristMemo Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		5ED87418B795E0BEAF19BDB2 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 98F54143AB4E86B28C3AFEE0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 3D8CF93CAE723F63B3140B09;
+			remoteInfo = ctrl;
+		};
+		FB3FFD61B7D6B9712B621E64 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 98F54143AB4E86B28C3AFEE0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1A474AE34889CC14CF6F3AA7;
+			remoteInfo = watch;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		ED2475941EA31E7175C3FE7D /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				51E14069787F965942359172 /* WristMemoControls.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B6B5712DC83D7352EE7D5D21 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				7395CD3B076723358C708BE0 /* WristMemo Watch App.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		3A0075E4CFD286E9FE8E7D55 /* SharedConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SharedConfig.swift"; sourceTree = "<group>"; };
+		ED80ABA31146DD29FA932AD8 /* RecordingLaunchRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RecordingLaunchRequest.swift"; sourceTree = "<group>"; };
+		689CF9FA680CBDFB7F9D75AC /* StartRecordingIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StartRecordingIntent.swift"; sourceTree = "<group>"; };
+		5CE93DA78512CAEA42DBEE5B /* WristMemoWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WristMemoWatchApp.swift"; sourceTree = "<group>"; };
+		7591B32180C3ACA7897C76F6 /* RecorderModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RecorderModel.swift"; sourceTree = "<group>"; };
+		9636ABE0F73C0A620F2F5F18 /* RecordingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RecordingEngine.swift"; sourceTree = "<group>"; };
+		7567CDB7BBFB1C0F2E916475 /* AudioCompressor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AudioCompressor.swift"; sourceTree = "<group>"; };
+		A6D4D2B86FC1E24980761A25 /* Memo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Memo.swift"; sourceTree = "<group>"; };
+		9B7E5BAF41C022ED29C69870 /* MemoStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MemoStore.swift"; sourceTree = "<group>"; };
+		796A3395BAC882FAE5DD6938 /* WatchSyncClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WatchSyncClient.swift"; sourceTree = "<group>"; };
+		C09AB83111313DD5AD3F8B26 /* Haptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Haptics.swift"; sourceTree = "<group>"; };
+		2F65A747EC963F2F4CD5E5E9 /* WristMemoShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WristMemoShortcuts.swift"; sourceTree = "<group>"; };
+		32803F96509DBEDEB9BE8B7B /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RootView.swift"; sourceTree = "<group>"; };
+		D217F2ED7DCF130FCCDF1377 /* RecordingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RecordingView.swift"; sourceTree = "<group>"; };
+		9E51D2F88B7230D114D08F72 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HomeView.swift"; sourceTree = "<group>"; };
+		99F644AB75812F8E61AADBC2 /* PermissionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PermissionView.swift"; sourceTree = "<group>"; };
+		D9CA24DBB326CC0D27A858EF /* ResultViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ResultViews.swift"; sourceTree = "<group>"; };
+		087FC6EE93EAFFBD66585871 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Assets.xcassets"; sourceTree = "<group>"; };
+		C7F424B12DE56E9CAD6F4DE5 /* ControlsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ControlsBundle.swift"; sourceTree = "<group>"; };
+		149D488601AE102967EB70A4 /* StartRecordingControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StartRecordingControl.swift"; sourceTree = "<group>"; };
+		2485CEB2051BDEF12B42AF21 /* WristMemoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WristMemoApp.swift"; sourceTree = "<group>"; };
+		6FE33FF418EC40F4790A1578 /* PhoneLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PhoneLibrary.swift"; sourceTree = "<group>"; };
+		7FF4F345E89E8DB8E583DC96 /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LibraryView.swift"; sourceTree = "<group>"; };
+		3C356518F3C752185B32433B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Assets.xcassets"; sourceTree = "<group>"; };
+		21C71F4B374B671FF62278CB /* WatchApp-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "WatchApp-Info.plist"; sourceTree = "<group>"; };
+		636CCEAF8B862F44208A3C02 /* WatchApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "WatchApp.entitlements"; sourceTree = "<group>"; };
+		5040D7F4DAC8100693F8784A /* WatchControls-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "WatchControls-Info.plist"; sourceTree = "<group>"; };
+		CD819A1E2C00F9D53A559C27 /* WatchControls.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "WatchControls.entitlements"; sourceTree = "<group>"; };
+		2A993087E3E52FF396FE5E3A /* iOSApp-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "iOSApp-Info.plist"; sourceTree = "<group>"; };
+		B66BCDC810D3FCEA23D284EF /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "README.md"; sourceTree = "<group>"; };
+		6D693E0FFF8AA9931D983AE7 /* DESIGN.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "DESIGN.md"; sourceTree = "<group>"; };
+		905084BEEFE55F50CE33F036 /* LIMITATIONS.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "LIMITATIONS.md"; sourceTree = "<group>"; };
+		57157261AC48F9302A3B476E /* WristMemo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "WristMemo.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		ABB217AE039EB9EFED5B9F29 /* WristMemo Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "WristMemo Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		6249C2783F0DC1188AF10FD6 /* WristMemoControls.appex */ = {isa = PBXFileReference; explicitFileType = wrapper.app-extension; includeInIndex = 0; path = "WristMemoControls.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A4FB71277C7E6D6E3B753578 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C8EF3F76D2D964208BB74EEC /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E9B6599930E107E2EF2A4881 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		ADCF10F76EBF2A74473E9DC4 = {
+			isa = PBXGroup;
+			children = (
+				44C7E229889FE9D1BB841A79 /* Shared */,
+				501D718CC480DE11CFE9BF4D /* WatchApp */,
+				F30900275289A90CC0A1923B /* WatchControls */,
+				E97825BA3F981BB990A2D271 /* iOSApp */,
+				5619E268CFFE28118C19FC6A /* Config */,
+				86E76DCFD8B38CD6265704AD /* Docs */,
+				5151B46607EBC8890D8DFCC2 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		44C7E229889FE9D1BB841A79 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				3A0075E4CFD286E9FE8E7D55 /* SharedConfig.swift */,
+				ED80ABA31146DD29FA932AD8 /* RecordingLaunchRequest.swift */,
+				689CF9FA680CBDFB7F9D75AC /* StartRecordingIntent.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		501D718CC480DE11CFE9BF4D /* WatchApp */ = {
+			isa = PBXGroup;
+			children = (
+				58492F208780FA5EF3807E8F /* Views */,
+				5CE93DA78512CAEA42DBEE5B /* WristMemoWatchApp.swift */,
+				7591B32180C3ACA7897C76F6 /* RecorderModel.swift */,
+				9636ABE0F73C0A620F2F5F18 /* RecordingEngine.swift */,
+				7567CDB7BBFB1C0F2E916475 /* AudioCompressor.swift */,
+				A6D4D2B86FC1E24980761A25 /* Memo.swift */,
+				9B7E5BAF41C022ED29C69870 /* MemoStore.swift */,
+				796A3395BAC882FAE5DD6938 /* WatchSyncClient.swift */,
+				C09AB83111313DD5AD3F8B26 /* Haptics.swift */,
+				2F65A747EC963F2F4CD5E5E9 /* WristMemoShortcuts.swift */,
+				087FC6EE93EAFFBD66585871 /* Assets.xcassets */,
+			);
+			path = WatchApp;
+			sourceTree = "<group>";
+		};
+		58492F208780FA5EF3807E8F /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				32803F96509DBEDEB9BE8B7B /* RootView.swift */,
+				D217F2ED7DCF130FCCDF1377 /* RecordingView.swift */,
+				9E51D2F88B7230D114D08F72 /* HomeView.swift */,
+				99F644AB75812F8E61AADBC2 /* PermissionView.swift */,
+				D9CA24DBB326CC0D27A858EF /* ResultViews.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		F30900275289A90CC0A1923B /* WatchControls */ = {
+			isa = PBXGroup;
+			children = (
+				C7F424B12DE56E9CAD6F4DE5 /* ControlsBundle.swift */,
+				149D488601AE102967EB70A4 /* StartRecordingControl.swift */,
+			);
+			path = WatchControls;
+			sourceTree = "<group>";
+		};
+		E97825BA3F981BB990A2D271 /* iOSApp */ = {
+			isa = PBXGroup;
+			children = (
+				2485CEB2051BDEF12B42AF21 /* WristMemoApp.swift */,
+				6FE33FF418EC40F4790A1578 /* PhoneLibrary.swift */,
+				7FF4F345E89E8DB8E583DC96 /* LibraryView.swift */,
+				3C356518F3C752185B32433B /* Assets.xcassets */,
+			);
+			path = iOSApp;
+			sourceTree = "<group>";
+		};
+		5619E268CFFE28118C19FC6A /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				21C71F4B374B671FF62278CB /* WatchApp-Info.plist */,
+				636CCEAF8B862F44208A3C02 /* WatchApp.entitlements */,
+				5040D7F4DAC8100693F8784A /* WatchControls-Info.plist */,
+				CD819A1E2C00F9D53A559C27 /* WatchControls.entitlements */,
+				2A993087E3E52FF396FE5E3A /* iOSApp-Info.plist */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		86E76DCFD8B38CD6265704AD /* Docs */ = {
+			isa = PBXGroup;
+			children = (
+				B66BCDC810D3FCEA23D284EF /* README.md */,
+				6D693E0FFF8AA9931D983AE7 /* DESIGN.md */,
+				905084BEEFE55F50CE33F036 /* LIMITATIONS.md */,
+			);
+			name = Docs;
+			sourceTree = "<group>";
+		};
+		5151B46607EBC8890D8DFCC2 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				57157261AC48F9302A3B476E /* WristMemo.app */,
+				ABB217AE039EB9EFED5B9F29 /* WristMemo Watch App.app */,
+				6249C2783F0DC1188AF10FD6 /* WristMemoControls.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		DAC66DDE62B7AF323A0B53C2 /* WristMemo */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1DF7C7E18FE198C3488C4BD9 /* Build configuration list for PBXNativeTarget "WristMemo" */;
+			buildPhases = (
+				6D4FEF11786AA9D46AC9F9B6 /* Sources */,
+				A4FB71277C7E6D6E3B753578 /* Frameworks */,
+				37EA9A4F4CCEEEDEE65ACFC3 /* Resources */,
+				B6B5712DC83D7352EE7D5D21 /* Embed Watch Content */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				4D6FC66A63FC28E93730BC03 /* PBXTargetDependency */,
+			);
+			name = "WristMemo";
+			productName = "WristMemo";
+			productReference = 57157261AC48F9302A3B476E /* WristMemo.app */;
+			productType = "com.apple.product-type.application";
+		};
+		1A474AE34889CC14CF6F3AA7 /* WristMemo Watch App */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2F0D5BD118B3A74DC445A16E /* Build configuration list for PBXNativeTarget "WristMemo Watch App" */;
+			buildPhases = (
+				547502D44C5FD9FF9946E0B9 /* Sources */,
+				C8EF3F76D2D964208BB74EEC /* Frameworks */,
+				9D51BF5B3739405F356181F4 /* Resources */,
+				ED2475941EA31E7175C3FE7D /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				0AE1C1A1693D1843A7E43843 /* PBXTargetDependency */,
+			);
+			name = "WristMemo Watch App";
+			productName = "WristMemo Watch App";
+			productReference = ABB217AE039EB9EFED5B9F29 /* WristMemo Watch App.app */;
+			productType = "com.apple.product-type.application";
+		};
+		3D8CF93CAE723F63B3140B09 /* WristMemoControls */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 021BB79EFE1FD1AD9046DD33 /* Build configuration list for PBXNativeTarget "WristMemoControls" */;
+			buildPhases = (
+				AADB5F4D9368BE60BBC9EFBB /* Sources */,
+				E9B6599930E107E2EF2A4881 /* Frameworks */,
+				9ACEC137E7BA44C12A355DBB /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "WristMemoControls";
+			productName = "WristMemoControls";
+			productReference = 6249C2783F0DC1188AF10FD6 /* WristMemoControls.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		98F54143AB4E86B28C3AFEE0 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2660;
+				LastUpgradeCheck = 2660;
+				TargetAttributes = {
+					DAC66DDE62B7AF323A0B53C2 = {
+						CreatedOnToolsVersion = 26.6;
+					};
+					1A474AE34889CC14CF6F3AA7 = {
+						CreatedOnToolsVersion = 26.6;
+					};
+					3D8CF93CAE723F63B3140B09 = {
+						CreatedOnToolsVersion = 26.6;
+					};
+				};
+			};
+			buildConfigurationList = 3D29D9F3A882C4202964FB56 /* Build configuration list for PBXProject "WristMemo" */;
+			compatibilityVersion = "Xcode 15.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = ADCF10F76EBF2A74473E9DC4;
+			productRefGroup = 5151B46607EBC8890D8DFCC2 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				DAC66DDE62B7AF323A0B53C2 /* WristMemo */,
+				1A474AE34889CC14CF6F3AA7 /* WristMemo Watch App */,
+				3D8CF93CAE723F63B3140B09 /* WristMemoControls */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		37EA9A4F4CCEEEDEE65ACFC3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F14B288A56497EDEEC9CD972 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9D51BF5B3739405F356181F4 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D0E7307132FC902663FFC359 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9ACEC137E7BA44C12A355DBB /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		6D4FEF11786AA9D46AC9F9B6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				599F507023934F71BE8B2E3C /* WristMemoApp.swift in Sources */,
+				A69B83E2C3873F3581F30580 /* PhoneLibrary.swift in Sources */,
+				86F0C051283F4C89CA72353E /* LibraryView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		547502D44C5FD9FF9946E0B9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				92EDCF5E39505E567E03ACF9 /* WristMemoWatchApp.swift in Sources */,
+				9ECD8E15E3FB15B79BB73DE3 /* RecorderModel.swift in Sources */,
+				E35FBD9CAC58517FFDC881DC /* RecordingEngine.swift in Sources */,
+				1F7BC69593A44D67B310B345 /* AudioCompressor.swift in Sources */,
+				E197E2B561CC11E2A5673803 /* Memo.swift in Sources */,
+				15E66016E41F5EF30FA95578 /* MemoStore.swift in Sources */,
+				76FE00D45A8954634D63CCB8 /* WatchSyncClient.swift in Sources */,
+				178A3983E55BC551A60DEECA /* Haptics.swift in Sources */,
+				86482B01D52896D50457DEBB /* WristMemoShortcuts.swift in Sources */,
+				F19A498839D222BB643B4C0B /* RootView.swift in Sources */,
+				43F8BF95842F94F8E179667C /* RecordingView.swift in Sources */,
+				A678DF942984E72E6C33DBCB /* HomeView.swift in Sources */,
+				65E5151B8770A1E79D0208BB /* PermissionView.swift in Sources */,
+				3DF7B8FE191858317B2565D3 /* ResultViews.swift in Sources */,
+				C05E50E6888982B44D3452EC /* SharedConfig.swift in Sources */,
+				919D7DEA3C85970937C29F99 /* RecordingLaunchRequest.swift in Sources */,
+				A5E7DDDDA7C44DDF6F17E6B3 /* StartRecordingIntent.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AADB5F4D9368BE60BBC9EFBB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				574A354C96955C0D9269AD34 /* ControlsBundle.swift in Sources */,
+				1C58158C22572E6553DF0111 /* StartRecordingControl.swift in Sources */,
+				4207A912880FD3CAFFE89512 /* SharedConfig.swift in Sources */,
+				B3171D88BD0CC07D9DE9268A /* RecordingLaunchRequest.swift in Sources */,
+				980E73B1C96C45CF7C2AAABB /* StartRecordingIntent.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		0AE1C1A1693D1843A7E43843 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 3D8CF93CAE723F63B3140B09 /* WristMemoControls */;
+			targetProxy = 5ED87418B795E0BEAF19BDB2 /* PBXContainerItemProxy */;
+		};
+		4D6FC66A63FC28E93730BC03 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1A474AE34889CC14CF6F3AA7 /* WristMemo Watch App */;
+			targetProxy = FB3FFD61B7D6B9712B621E64 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		855D4B0C75ECD556474FD8F5 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOL_FRAMEWORKS = SwiftUI;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = ("DEBUG=1", "$(inherited)", );
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		4E74312DBBD620AE1CB5D771 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOL_FRAMEWORKS = SwiftUI;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		EDC374D6F043FABAE691C8FF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/iOSApp-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = WristMemo;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", );
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.wristmemo.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		0EE758F935113EF3470CF7DD /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/iOSApp-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = WristMemo;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", );
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.wristmemo.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		855C0CC6CCC2C59A2DE86FB1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Config/WatchApp.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/WatchApp-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = WristMemo;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", );
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.wristmemo.app.watchkitapp";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Debug;
+		};
+		0EDFD2F4AC1DDDA70F4CF0EC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Config/WatchApp.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/WatchApp-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = WristMemo;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", );
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.wristmemo.app.watchkitapp";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Release;
+		};
+		9BF6B591DA35C1B21FEFB5DD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Config/WatchControls.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/WatchControls-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "WristMemo Controls";
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks", );
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.wristmemo.app.watchkitapp.controls";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Debug;
+		};
+		A18BB468EC0CEDFDF9488DB1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Config/WatchControls.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/WatchControls-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "WristMemo Controls";
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks", );
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.wristmemo.app.watchkitapp.controls";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		3D29D9F3A882C4202964FB56 /* Build configuration list for PBXProject "WristMemo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				855D4B0C75ECD556474FD8F5 /* Debug */,
+				4E74312DBBD620AE1CB5D771 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1DF7C7E18FE198C3488C4BD9 /* Build configuration list for PBXNativeTarget "WristMemo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EDC374D6F043FABAE691C8FF /* Debug */,
+				0EE758F935113EF3470CF7DD /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		2F0D5BD118B3A74DC445A16E /* Build configuration list for PBXNativeTarget "WristMemo Watch App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				855C0CC6CCC2C59A2DE86FB1 /* Debug */,
+				0EDFD2F4AC1DDDA70F4CF0EC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		021BB79EFE1FD1AD9046DD33 /* Build configuration list for PBXNativeTarget "WristMemoControls" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9BF6B591DA35C1B21FEFB5DD /* Debug */,
+				A18BB468EC0CEDFDF9488DB1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 98F54143AB4E86B28C3AFEE0 /* Project object */;
+}

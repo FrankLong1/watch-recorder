@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Optional. Only used for the cross-process hand-off fallback described
+	     in ARCHITECTURE.md. Remove this file from the target's
+	     CODE_SIGN_ENTITLEMENTS setting if you would rather not provision a
+	     group; the app still starts recording via the in-process path. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.wristmemo.shared</string>
+	</array>
+</dict>
+</plist>
