@@ -142,7 +142,11 @@ final class MemoStore {
         }
 
         let memo = Memo(id: id, filename: filename, createdAt: createdAt, duration: duration)
-        memos.insert(memo, at: 0)
+        // Newest first, matching how `loadIfNeeded` builds the array. Position 0
+        // for a just-recorded memo, but a capture recovered from a crash carries
+        // its original date and belongs wherever that date falls.
+        let position = memos.firstIndex { $0.createdAt < memo.createdAt } ?? memos.endIndex
+        memos.insert(memo, at: position)
         persistIndex()
         return memo
     }

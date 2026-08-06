@@ -46,7 +46,13 @@ final class RecorderModel {
 
     // MARK: - Observable state
 
-    private(set) var phase: Phase = .idle
+    /// Returning to idle re-arms the next recorder. Attached to the transition
+    /// rather than called from each path that reaches idle — as five separate
+    /// calls it had already drifted, with the one after a save unreachable
+    /// behind its own `phase == .idle` guard.
+    private(set) var phase: Phase = .idle {
+        didSet { if phase == .idle { prearmIfIdle() } }
+    }
     private(set) var permission: MicPermission = .undetermined
     private(set) var elapsed: TimeInterval = 0
     private(set) var level: Double = 0
@@ -115,6 +121,8 @@ final class RecorderModel {
         recoveredCount = recovered.count
         for memo in recovered { sync.send(memo) }
 
+        // The first arm of the session. Deliberately last: it touches the disk,
+        // and a launch that is already recording must not wait on it.
         prearmIfIdle()
     }
 
@@ -129,6 +137,9 @@ final class RecorderModel {
         // foreground-started session alive. See LIMITATIONS.md.
         permission = Self.currentPermission()
         handlePendingRequest()
+        // Not covered by the `phase` observer: granting the microphone in
+        // Settings and coming back changes `permission` while phase is already
+        // idle, so no transition fires.
         prearmIfIdle()
     }
 
@@ -255,7 +266,6 @@ final class RecorderModel {
             phase = .failed(failureMessage)
             Haptics.failed()
         }
-        prearmIfIdle()
     }
 
     func cancelRecording() {
@@ -268,13 +278,11 @@ final class RecorderModel {
         phase = .idle
         elapsed = 0
         Haptics.discarded()
-        prearmIfIdle()
     }
 
     func dismissResult() {
         phase = .idle
         elapsed = 0
-        prearmIfIdle()
     }
 
     func delete(_ memo: Memo) {

@@ -176,10 +176,18 @@ final class RecordingEngine: NSObject {
         recorder?.stop()
         recorder = nil
         captureURL = nil
-        // Leaving the session active would keep the microphone indicator lit.
+        releaseSession()
+        return url
+    }
+
+    /// Hands the microphone back.
+    ///
+    /// Every path that ends a recording goes through here, including the
+    /// delegate's unexpected-stop path — leaving the session active would keep
+    /// the microphone indicator lit with nothing recording.
+    private func releaseSession() {
         try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
         activation = .idle
-        return url
     }
 
     // MARK: - Metering
@@ -213,6 +221,7 @@ extension RecordingEngine: AVAudioRecorderDelegate {
             self.log.error("Recorder stopped: \(reason, privacy: .public)")
             self.recorder = nil
             self.captureURL = nil
+            self.releaseSession()
             self.onUnexpectedStop?(url)
         }
     }
