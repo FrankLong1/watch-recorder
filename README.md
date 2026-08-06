@@ -72,17 +72,38 @@ xcodebuild -project WristMemo.xcodeproj -target "WristMemo Watch App" \
 | `WristMemo` | iOS 26 | Companion — receives, lists and plays synced memos |
 | `WristMemo Watch App` | watchOS 26 | Recording app |
 | `WristMemoControls` | watchOS 26 | Control extension (the Action button entry point) |
+| `WristMemoTests` | watchOS 26 | Swift Testing — storage, formatting, launch latch |
+| `WristMemoUITests` | watchOS 26 | XCUITest — taps the real watch UI |
 
 ### Signing
 
 Bundle identifiers are `com.franklong.wristmemo*` and signing uses Team
 `44X645LJ6H`. Change both if you are building under a different account.
 
+## Testing
+
+`./sim.sh` is the repeatable path: it boots a watch simulator, builds, runs both
+test bundles, then drives the app and asserts on the real container and log.
+
+```bash
+./sim.sh                 # unit tests, UI taps, and every harness scenario
+./sim.sh --unit          # logic bundle only (~2s inner loop)
+./sim.sh --ui            # XCUITest taps only
+./sim.sh --watch         # re-run on save
+./sim.sh --repeat 20     # run N times; surfaces launch-path races
+./sim.sh --help          # every flag
+```
+
+Scenarios cover a record→save round trip, the pre-armed capture, crash recovery
+with its index ordering, and the first-sample latency marker. Simulator latency
+is not device latency — see [LATENCY.md](LATENCY.md).
+
 ## Verifying on hardware
 
 See [DEVICE_TESTING.md](DEVICE_TESTING.md) — it covers the Mac setup that is
 already done, the Developer Mode / pairing steps that need your hardware, and
-what remains unverified.
+what remains unverified. `run.sh` builds, installs and streams logs from a
+paired watch; `sim.sh` is its simulator counterpart.
 
 ## Layout
 

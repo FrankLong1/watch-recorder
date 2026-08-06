@@ -37,6 +37,7 @@ struct RecordingView: View {
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(isPaused ? Color.secondary : Color.red)
                 .monospaced()
+                .accessibilityIdentifier(AccessibilityID.recordingStatus)
         }
     }
 
@@ -45,9 +46,11 @@ struct RecordingView: View {
             CircleButton(systemImage: "xmark", tint: .secondary, accessibilityLabel: "Discard recording") {
                 model.cancelRecording()
             }
+            .accessibilityIdentifier(AccessibilityID.discardButton)
             CircleButton(systemImage: "stop.fill", tint: .red, filled: true, accessibilityLabel: "Stop and save recording") {
                 Task { await model.stopAndSave() }
             }
+            .accessibilityIdentifier(AccessibilityID.stopButton)
         }
     }
 }
@@ -59,6 +62,7 @@ private struct ElapsedTimer: View {
 
     var body: some View {
         Text(model.elapsed.recordingClock)
+            .accessibilityIdentifier(AccessibilityID.elapsedTimer)
             .font(.system(size: 42, weight: .semibold, design: .rounded))
             // Fixed-width digits stop the timer jittering as numbers change.
             .monospacedDigit()

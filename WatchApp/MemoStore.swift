@@ -14,7 +14,7 @@ final class MemoStore {
     private(set) var memos: [Memo] = []
 
     private let log = SharedConfig.logger("MemoStore")
-    private let fileManager = FileManager.default
+    private let fileManager: FileManager
 
     // Stored, not computed: these are rebuilt on every access otherwise, and
     // `memosDirectory` alone is hit four times per save.
@@ -29,12 +29,20 @@ final class MemoStore {
     /// pre-armed file that was never recorded into.
     private static let minimumDuration: TimeInterval = 0.3
 
-    init() {
+    /// The app's initialiser. Application Support is the only root the shipping
+    /// app ever uses.
+    convenience init() {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let root = base.appendingPathComponent("WristMemo", isDirectory: true)
-        capturesDirectory = root.appendingPathComponent("Captures", isDirectory: true)
-        memosDirectory = root.appendingPathComponent("Memos", isDirectory: true)
-        indexURL = root.appendingPathComponent("memos.json")
+        self.init(rootURL: base.appendingPathComponent("WristMemo", isDirectory: true))
+    }
+
+    /// Testability seam. Tests point this at a unique temporary directory so
+    /// they exercise the real layout without touching an app container.
+    init(rootURL: URL, fileManager: FileManager = .default) {
+        self.fileManager = fileManager
+        capturesDirectory = rootURL.appendingPathComponent("Captures", isDirectory: true)
+        memosDirectory = rootURL.appendingPathComponent("Memos", isDirectory: true)
+        indexURL = rootURL.appendingPathComponent("memos.json")
     }
 
     func url(for memo: Memo) -> URL {
@@ -170,7 +178,7 @@ final class MemoStore {
         // Cheap reject before spinning up an AAC encoder: a header-only capture
         // is a pre-arm that was never recorded into.
         let bytes = (attributes[.size] as? Int) ?? 0
-        let minimumBytes = Int(RecordingEngine.captureSampleRate * 2 * Self.minimumDuration)
+        let minimumBytes = CaptureFormat.bytes(forSeconds: Self.minimumDuration)
         guard bytes > minimumBytes else {
             try? fileManager.removeItem(at: captureURL)
             return nil

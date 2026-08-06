@@ -28,6 +28,26 @@
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES">
       <Testables>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "F17DAC9B3A981CDD91113D35"
+               BuildableName = "WristMemoUITests.xctest"
+               BlueprintName = "WristMemoUITests"
+               ReferencedContainer = "container:WristMemo.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "8953F0169E520916FD62C649"
+               BuildableName = "WristMemoTests.xctest"
+               BlueprintName = "WristMemoTests"
+               ReferencedContainer = "container:WristMemo.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction

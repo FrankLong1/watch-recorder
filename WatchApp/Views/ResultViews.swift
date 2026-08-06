@@ -26,11 +26,13 @@ struct SavedView: View {
 
             Text("Saved")
                 .font(.headline)
+                .accessibilityIdentifier(AccessibilityID.savedTitle)
 
             Text(memo.duration.memoClock)
                 .font(.system(size: 15, weight: .medium))
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
+                .accessibilityIdentifier(AccessibilityID.savedDuration)
 
             HStack(spacing: 8) {
                 Button("Delete", role: .destructive) {
@@ -38,11 +40,13 @@ struct SavedView: View {
                     model.dismissResult()
                 }
                 .font(.caption)
+                .accessibilityIdentifier(AccessibilityID.deleteSavedButton)
 
                 Button("Done") { model.dismissResult() }
                     .font(.caption)
                     .buttonStyle(.borderedProminent)
                     .tint(.green)
+                    .accessibilityIdentifier(AccessibilityID.doneButton)
             }
             .padding(.top, 2)
         }
@@ -64,10 +68,12 @@ struct FailureView: View {
             Text(message)
                 .font(.caption)
                 .multilineTextAlignment(.center)
+                .accessibilityIdentifier(AccessibilityID.failureMessage)
 
             Button("OK") { model.dismissResult() }
                 .font(.caption)
                 .buttonStyle(.bordered)
+                .accessibilityIdentifier(AccessibilityID.failureDismissButton)
         }
         .padding(.horizontal, 6)
     }

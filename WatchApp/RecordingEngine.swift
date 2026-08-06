@@ -23,13 +23,11 @@ final class RecordingEngine: NSObject {
         }
     }
 
-    static let captureSampleRate = 22_050.0
-
     private static let captureSettings: [String: Any] = [
         AVFormatIDKey: Int(kAudioFormatLinearPCM),
-        AVSampleRateKey: RecordingEngine.captureSampleRate,
-        AVNumberOfChannelsKey: 1,
-        AVLinearPCMBitDepthKey: 16,
+        AVSampleRateKey: CaptureFormat.sampleRate,
+        AVNumberOfChannelsKey: CaptureFormat.channels,
+        AVLinearPCMBitDepthKey: CaptureFormat.bitDepth,
         AVLinearPCMIsFloatKey: false,
         AVLinearPCMIsBigEndianKey: false
     ]

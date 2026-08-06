@@ -31,6 +31,7 @@ struct HomeView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .listRowBackground(Color.clear)
+                        .accessibilityIdentifier(AccessibilityID.emptyHint)
                 } else {
                     ForEach(model.store.memos) { memo in
                         MemoRow(memo: memo)
@@ -44,6 +45,7 @@ struct HomeView: View {
                     }
                 }
             }
+            .accessibilityIdentifier(AccessibilityID.memoList)
             .navigationTitle("WristMemo")
         }
     }
@@ -63,6 +65,7 @@ struct HomeView: View {
             .foregroundStyle(.white)
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier(AccessibilityID.recordButton)
     }
 }
 

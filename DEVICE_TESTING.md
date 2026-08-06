@@ -1,5 +1,12 @@
 # Testing on a real Apple Watch Ultra 2
 
+> **Most changes do not need hardware.** `./sim.sh` runs the unit bundle, taps
+> through the real UI with XCUITest, and asserts on the simulator's container
+> and log — see the Testing section in [README.md](README.md). Reach for a
+> device when you need the physical Action button, true press-to-record latency,
+> or a real WatchConnectivity transfer to the phone; the simulator cannot
+> produce any of those.
+
 ## What is already done on this Mac
 
 | | |
@@ -41,9 +48,21 @@ move the `.mobileprovision` files aside and rebuild with
 refresh button in the accounts pane; signing out and back in is the only manual
 equivalent, and it is rarely what you need.
 
-**Status 2026-08-06:** paid membership has been ordered; Apple warns activation
-can take up to 48 hours. Until it activates the team is still free and profiles
-still expire in 7 days.
+**Status 2026-08-06:** paid membership is **active**. Team 44X645LJ6H is now
+enrolled as *Individual*, agreements accepted, renewing 2027-08-06.
+
+Activation landed at ~11:34, but the profiles on this Mac were minted at 11:16 —
+*before* it — so they are still free-tier and still expire 2026-08-13. They do
+not upgrade themselves. Move them aside and rebuild with
+`-allowProvisioningUpdates` to re-mint at one year:
+
+```bash
+mkdir -p ~/Library/Developer/Xcode/UserData/Provisioning\ Profiles.free-backup
+mv ~/Library/Developer/Xcode/UserData/Provisioning\ Profiles/*.mobileprovision \
+   ~/Library/Developer/Xcode/UserData/Provisioning\ Profiles.free-backup/
+```
+
+Re-run the expiry check afterwards; a date a year out is the confirmation.
 
 ## What you have to do
 
@@ -159,13 +178,15 @@ repository; obtain them locally from `xcrun devicectl list devices`.
 | iPhone | `<iPhone hardware UDID>` |
 | Apple Watch | `<Watch hardware UDID>` |
 
-If the watch is missing:
+If the watch is missing, register it by hand at
+[Devices](https://developer.apple.com/account/resources/devices/list) → **+** →
+platform **watchOS** → paste the UDID from `xcrun devicectl list devices`.
 
-- **Paid** — add it at [Devices](https://developer.apple.com/account/resources/devices/list)
-  → **+** → platform **watchOS** → paste the UDID. This is the escape hatch: it
-  needs no Mac-to-watch connection at all, so it sidesteps step 3 entirely.
-- **Free** — there is no portal device management. Xcode must register it
-  automatically, which means step 3 has to succeed first. No way around it.
+**This is the escape hatch, and on a paid team it is the primary path.** Portal
+registration needs no Mac-to-watch connection at all, so it sidesteps step 3 —
+the tunnel, the Wi-Fi subnet, the VPN, all of it. Combined with installing via
+the iPhone over USB (step 6, path 1), the whole loop runs without the Mac ever
+talking to the watch directly.
 
 Then move the profiles aside and rebuild so they regenerate with both devices.
 
@@ -268,10 +289,11 @@ xcrun simctl spawn $SIM log stream --predicate 'subsystem == "com.franklong.wris
 
 ## Gotchas
 
-- **7-day expiry — confirmed, not hypothetical.** Team 44X645LJ6H is a free
-  personal team. Profiles minted 2026-08-06 expire 2026-08-13, exactly 7 days.
-  The app stops launching then and needs a re-run from Xcode. Paid raises this
-  to a year; see the tier table above.
+- **The 7-day expiry is now fixed, but not retroactively.** Team 44X645LJ6H was
+  a free personal team; profiles minted 2026-08-06 at 11:16 expire 2026-08-13.
+  Paid membership activated the same morning and raises this to a year, but only
+  for profiles minted *after* activation — the existing ones must be deleted and
+  re-minted. See the tier table above.
 - **The Action button is Ultra-only.** On a Series 9 or any non-Ultra watch,
   Settings › Action Button does not exist. This does not block testing the
   design: `StartRecordingControl`, `RecordComplication`, and `WristMemoShortcuts`
