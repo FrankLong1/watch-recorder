@@ -6,30 +6,43 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 10) {
+            // A List rather than a ScrollView: swipe-to-delete only works in
+            // List, and it brings the crown scrolling behaviour watchOS users
+            // expect for free.
+            List {
+                Section {
                     recordButton
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                }
 
-                    if model.recoveredCount > 0 {
-                        Label(
-                            "^[\(model.recoveredCount) recovered memo](inflect: true)",
-                            systemImage: "arrow.uturn.backward.circle"
-                        )
+                if model.recoveredCount > 0 {
+                    Label(
+                        "^[\(model.recoveredCount) recovered memo](inflect: true)",
+                        systemImage: "arrow.uturn.backward.circle"
+                    )
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .listRowBackground(Color.clear)
+                }
+
+                if model.store.memos.isEmpty {
+                    Text("Press the Action button to start a memo.")
                         .font(.caption2)
-                        .foregroundStyle(.orange)
-                    }
-
-                    if model.store.memos.isEmpty {
-                        Text("Press the Action button to start a memo.")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.top, 4)
-                    } else {
-                        MemoList(memos: model.store.memos)
+                        .foregroundStyle(.secondary)
+                        .listRowBackground(Color.clear)
+                } else {
+                    ForEach(model.store.memos) { memo in
+                        MemoRow(memo: memo)
+                            .swipeActions {
+                                Button(role: .destructive) {
+                                    model.delete(memo)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
                     }
                 }
-                .padding(.horizontal, 2)
             }
             .navigationTitle("WristMemo")
         }
@@ -53,27 +66,6 @@ struct HomeView: View {
     }
 }
 
-struct MemoList: View {
-
-    @Environment(RecorderModel.self) private var model
-    let memos: [Memo]
-
-    var body: some View {
-        LazyVStack(spacing: 6) {
-            ForEach(memos) { memo in
-                MemoRow(memo: memo)
-                    .swipeActions {
-                        Button(role: .destructive) {
-                            model.delete(memo)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
-            }
-        }
-    }
-}
-
 struct MemoRow: View {
     let memo: Memo
 
@@ -93,9 +85,7 @@ struct MemoRow: View {
                 .foregroundStyle(.secondary)
             syncBadge
         }
-        .padding(.vertical, 7)
-        .padding(.horizontal, 10)
-        .background(.white.opacity(0.1), in: .rect(cornerRadius: 12))
+        .padding(.vertical, 2)
     }
 
     @ViewBuilder
