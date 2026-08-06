@@ -22,7 +22,8 @@ Ultra. Setup and the remaining checklist: [DEVICE_TESTING.md](DEVICE_TESTING.md)
    forward at once.
 3. The app sees the pending request and starts recording — haptic, red
    indicator, running timer.
-4. **Stop & Save** commits the memo; **Cancel** discards it; **Pause** holds.
+4. **Stop** commits the memo; **Cancel** discards it. (Pause still exists
+   internally for phone-call interruptions, but is not a button.)
 5. The memo is compressed to AAC, stored on the watch, and queued for the iPhone.
 
 Design rationale: [DESIGN.md](DESIGN.md). How the press-to-recording time is

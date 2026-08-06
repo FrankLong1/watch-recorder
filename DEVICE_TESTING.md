@@ -76,7 +76,7 @@ Verified by actually running on the Apple Watch Ultra 3 simulator:
 - First-run microphone permission screen
 - **Launch-straight-into-recording** — the same `startRequested` path the Action
   button drives, triggered by a DEBUG launch flag (below)
-- Live timer, level meter, and the Cancel / Pause / Stop controls
+- Live timer, level meter, and the Cancel / Stop controls
 - **Crash recovery**: hard-killed mid-recording, the 2 MB PCM capture survived,
   and the next launch turned it into a valid 216 KB AAC file — `afinfo` reports
   1 ch, 22050 Hz, 45.5 s, 32 kbit/s. Compression ratio 9.3×.
