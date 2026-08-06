@@ -6,6 +6,10 @@ import Foundation
 /// A minute of capture PCM is ~2.6 MB; the same minute of 32 kbit/s AAC is
 /// ~240 KB. That matters twice over — watch storage, and the time
 /// `WCSession.transferFile` needs to move the memo to the phone.
+///
+/// Shared because both ends of that transfer need it. The watch compresses
+/// every memo it files; the phone finishes the job for a capture the watch had
+/// to keep raw, since nothing downstream of the phone can read PCM in a CAF.
 enum AudioCompressor {
 
     /// Reads `source`, writes an `.m4a` at `destination`, returns its duration.

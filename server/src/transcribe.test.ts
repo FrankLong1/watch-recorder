@@ -1,5 +1,47 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { multipart, transcribe, TranscriptionError } from "./transcribe";
+import {
+  audioFormat,
+  multipart,
+  transcribe,
+  TranscriptionError,
+  transcriptionFailureStatus,
+} from "./transcribe";
+
+describe("audioFormat", () => {
+  test("accepts what the service can decode and refuses what it cannot", () => {
+    expect(audioFormat("audio/mp4")).toBe("audio/mp4");
+    expect(audioFormat("audio/wav")).toBe("audio/wav");
+
+    // The watch keeps a capture it could not compress rather than losing it,
+    // and that is raw PCM in a CAF container — a format the transcription
+    // service does not read. Refusing it here is what stops the server from
+    // relabelling it as an m4a and paying to have it mis-decoded.
+    expect(audioFormat("audio/x-caf")).toBeNull();
+    expect(audioFormat("application/octet-stream")).toBeNull();
+  });
+
+  test("ignores case and parameters, and defaults a missing header to m4a", () => {
+    expect(audioFormat("AUDIO/MP4")).toBe("audio/mp4");
+    expect(audioFormat("audio/wav; codecs=1")).toBe("audio/wav");
+    // A phone build predating the header sent m4a and said nothing.
+    expect(audioFormat(undefined)).toBe("audio/mp4");
+    expect(audioFormat("")).toBe("audio/mp4");
+  });
+});
+
+describe("transcriptionFailureStatus", () => {
+  test("keeps a non-retryable failure out of the range the phone retries", () => {
+    // The phone re-sends every 5xx forever and gives up on every 4xx, so this
+    // is the whole contract: the class decides whether a memo can ever reach a
+    // visible failure, and 500 would leave it retrying invisibly instead.
+    const terminal = transcriptionFailureStatus(new TranscriptionError("bad model", false));
+    expect(terminal).toBeGreaterThanOrEqual(400);
+    expect(terminal).toBeLessThan(500);
+
+    const retryable = transcriptionFailureStatus(new TranscriptionError("upstream 503", true));
+    expect(retryable).toBeGreaterThanOrEqual(500);
+  });
+});
 
 describe("multipart", () => {
   test("does not drain the audio ahead of downstream demand", async () => {
@@ -137,6 +179,24 @@ describe("transcribe", () => {
     expect(received?.model).toBe("gpt-transcribe");
     expect(received?.responseFormat).toBe("json");
     expect(received?.filename).toBe("memo.m4a");
+    expect(Array.from(received?.audio ?? [])).toEqual(Array.from(audio));
+  });
+
+  test("presents the audio under a filename matching what it actually is", async () => {
+    // The service picks its decoder from the extension, so this is the part
+    // that has to follow the declared type rather than being fixed at m4a.
+    const audio = new Uint8Array([0x52, 0x49, 0x46, 0x46]);
+
+    await transcribe({
+      audio: streamOf(audio),
+      audioLength: audio.byteLength,
+      apiKey: "k",
+      baseUrl,
+      model: "m",
+      contentType: "audio/wav",
+    });
+
+    expect(received?.filename).toBe("memo.wav");
     expect(Array.from(received?.audio ?? [])).toEqual(Array.from(audio));
   });
 

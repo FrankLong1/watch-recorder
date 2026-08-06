@@ -105,15 +105,22 @@ repo is public:
 export PROJECT_ID=…      # the GCP project that owns the shared instance
 export REGION=us-central1
 export SQL_INSTANCE=…    # the existing Cloud SQL instance to attach to
+
+# Terraform reads the same three, so there is one place to set them and no way
+# for the plan to target a different project than the commands that follow it.
+export TF_VAR_project_id="$PROJECT_ID"
+export TF_VAR_region="$REGION"
+export TF_VAR_sql_instance_name="$SQL_INSTANCE"
 ```
 
 **1. Provision everything except the service.** `image` is empty on the first
 apply, so the database, identity, secrets and image repository are created
 before there is anything to deploy.
 
-`operator_iam_user` has no default and is the one value you must set — it is the
-human account that will impersonate the migrator in step 3. `terraform plan`
-fails asking for it otherwise.
+The project, region and instance come from the exports above. `operator_iam_user`
+has no default and is the one value left to set — it is the human account that
+will impersonate the migrator in step 3. `terraform plan` fails asking for it
+otherwise.
 
 ```bash
 cd terraform

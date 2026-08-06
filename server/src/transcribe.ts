@@ -19,6 +19,48 @@ export class TranscriptionError extends Error {
   }
 }
 
+/// What the phone may upload, and the filename to present it under upstream.
+///
+/// The transcription service picks a decoder from the filename's extension, so
+/// the name is not cosmetic: forwarding a raw-PCM CAF as `memo.m4a` does not
+/// merely skip a check, it hands the decoder a file it will mis-read. Only
+/// formats the service documents as supported appear here; anything else is
+/// refused at the edge instead of being relabelled into one of them.
+export const AUDIO_FORMATS = {
+  "audio/mp4": "memo.m4a",
+  "audio/x-m4a": "memo.m4a",
+  "audio/mpeg": "memo.mp3",
+  "audio/wav": "memo.wav",
+  "audio/x-wav": "memo.wav",
+  "audio/flac": "memo.flac",
+  "audio/ogg": "memo.ogg",
+  "audio/webm": "memo.webm",
+} as const;
+
+export type AudioContentType = keyof typeof AUDIO_FORMATS;
+
+const DEFAULT_CONTENT_TYPE: AudioContentType = "audio/mp4";
+
+/// Normalises an inbound Content-Type, or `null` when nothing upstream can read
+/// it. A missing header is taken as m4a: every memo the phone compressed has
+/// always been one, and a build predating the header must keep working.
+export function audioFormat(header: string | undefined): AudioContentType | null {
+  const value = (header ?? "").split(";")[0]?.trim().toLowerCase() ?? "";
+  if (!value) return DEFAULT_CONTENT_TYPE;
+  return value in AUDIO_FORMATS ? (value as AudioContentType) : null;
+}
+
+/// The status the ingest endpoint answers a failed transcription with.
+///
+/// The phone's retry loop keys on the class, not the code: it re-sends every
+/// 5xx indefinitely and stops on every 4xx. So a failure that will recur
+/// identically — an unusable model, audio the service refuses — has to land in
+/// the 4xx range, or the memo never reaches a visible `.failed` state and
+/// instead retries invisibly forever.
+export function transcriptionFailureStatus(error: TranscriptionError): 502 | 422 {
+  return error.retryable ? 502 : 422;
+}
+
 export interface TranscribeOptions {
   audio: ReadableStream<Uint8Array>;
   /// Byte length of `audio`, needed to compute the multipart Content-Length.
@@ -26,6 +68,9 @@ export interface TranscribeOptions {
   apiKey: string;
   baseUrl: string;
   model: string;
+  /// What the bytes actually are. Defaults to m4a, the only thing the phone
+  /// sent before it began declaring the format.
+  contentType?: AudioContentType;
   signal?: AbortSignal;
 }
 
@@ -34,7 +79,12 @@ export interface Transcription {
   model: string;
 }
 
-export function multipart(model: string, audio: ReadableStream<Uint8Array>, audioLength: number) {
+export function multipart(
+  model: string,
+  audio: ReadableStream<Uint8Array>,
+  audioLength: number,
+  contentType: AudioContentType = DEFAULT_CONTENT_TYPE,
+) {
   const boundary = `----wristmemo${crypto.randomUUID().replaceAll("-", "")}`;
   const encoder = new TextEncoder();
 
@@ -46,8 +96,8 @@ export function multipart(model: string, audio: ReadableStream<Uint8Array>, audi
       `Content-Disposition: form-data; name="response_format"\r\n\r\n` +
       `json\r\n` +
       `--${boundary}\r\n` +
-      `Content-Disposition: form-data; name="file"; filename="memo.m4a"\r\n` +
-      `Content-Type: audio/mp4\r\n\r\n`,
+      `Content-Disposition: form-data; name="file"; filename="${AUDIO_FORMATS[contentType]}"\r\n` +
+      `Content-Type: ${contentType}\r\n\r\n`,
   );
   const tail = encoder.encode(`\r\n--${boundary}--\r\n`);
 
@@ -115,6 +165,7 @@ export async function transcribe(options: TranscribeOptions): Promise<Transcript
     options.model,
     options.audio,
     options.audioLength,
+    options.contentType,
   );
 
   let response: Response;

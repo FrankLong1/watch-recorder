@@ -21,6 +21,8 @@ final class TranscriptionClient: NSObject {
     private var retryDelay: TimeInterval = 30
     private var didActivate = false
     private var backgroundEventsFinished: (() -> Void)?
+    private var backgroundEventsContinuation: CheckedContinuation<Void, Never>?
+    private var isBackgroundWaitCancelled = false
 
     private static let maximumRetryDelay: TimeInterval = 30 * 60
 
@@ -80,6 +82,46 @@ final class TranscriptionClient: NSObject {
         Task { @MainActor [weak self] in self?.uploadPending() }
     }
 
+    /// Suspends until the session says it has delivered every event the app was
+    /// relaunched to receive.
+    ///
+    /// The `.backgroundTask` handler must not return before that: the app is
+    /// suspended again the moment it does, and any completion still queued
+    /// would be lost — which is the whole reason the system started the process.
+    func waitForBackgroundEvents() async {
+        // Touching the session is what matters here. On a background relaunch
+        // nothing has built it yet, and building it is what reattaches the
+        // delegate the queued events are waiting to be delivered to.
+        _ = session
+        // A cancellation recorded by an earlier wait must not end this one.
+        isBackgroundWaitCancelled = false
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                // Cancelled before it could park. Parking now would leave a
+                // continuation nothing resumes, and the handler would hang
+                // until the system killed the app for it.
+                guard !isBackgroundWaitCancelled else {
+                    continuation.resume()
+                    return
+                }
+                backgroundEventsContinuation = continuation
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in self?.endBackgroundWait(cancelled: true) }
+        }
+    }
+
+    /// The only place the continuation is handed back, because resuming one
+    /// twice traps. Clears the slot as it resumes.
+    private func endBackgroundWait(cancelled: Bool = false) {
+        guard let continuation = backgroundEventsContinuation else {
+            if cancelled { isBackgroundWaitCancelled = true }
+            return
+        }
+        backgroundEventsContinuation = nil
+        continuation.resume()
+    }
+
     /// Re-queues anything that never landed. Safe to call repeatedly: the server
     /// keys on the memo's id, so a memo that already arrived is answered without
     /// being transcribed again.
@@ -118,7 +160,7 @@ final class TranscriptionClient: NSObject {
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("Bearer \(credentials.token)", forHTTPHeaderField: "Authorization")
-        request.setValue("audio/mp4", forHTTPHeaderField: "Content-Type")
+        request.setValue(Self.contentType(for: item.url), forHTTPHeaderField: "Content-Type")
         // The server stores these rather than re-deriving them from the audio,
         // exactly as the phone does with the watch's transfer metadata.
         request.setValue(String(item.recordedAt.timeIntervalSince1970), forHTTPHeaderField: "X-Recorded-At")
@@ -136,6 +178,22 @@ final class TranscriptionClient: NSObject {
         task.resume()
 
         log.info("Uploading \(item.id.uuidString, privacy: .public)")
+    }
+
+    /// Declares what the bytes actually are.
+    ///
+    /// Nearly every memo is AAC, but a capture the watch could not compress is
+    /// transferred as raw PCM in a CAF container rather than being lost.
+    /// `PhoneLibrary` converts those on arrival; one that will not convert is
+    /// still uploaded, and labelling it `audio/mp4` would have the server hand
+    /// the transcription service a file it silently mis-decodes. Told the
+    /// truth, the server can refuse it and the memo reaches a visible failure.
+    private static func contentType(for url: URL) -> String {
+        switch url.pathExtension.lowercased() {
+        case "caf": return "audio/x-caf"
+        case "wav": return "audio/wav"
+        default: return "audio/mp4"
+        }
     }
 
     /// A failed upload does not change any observable system state, so nothing
@@ -211,7 +269,13 @@ extension TranscriptionClient: URLSessionDataDelegate {
     }
 
     nonisolated func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
-        Task { @MainActor [weak self] in self?.backgroundEventsFinished?() }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            // Both halves of "the app may now go back to sleep": the UIKit
+            // completion handler, and the `.backgroundTask` that is parked.
+            self.backgroundEventsFinished?()
+            self.endBackgroundWait()
+        }
     }
 
     /// The response body is deliberately ignored — the transcript never comes
