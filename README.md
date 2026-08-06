@@ -73,13 +73,14 @@ xcodebuild -project WristMemo.xcodeproj -target "WristMemo Watch App" \
 
 ### App Group
 
-`group.com.wristmemo.shared` is used only as a cross-process fallback for the
-launch hand-off. If you would rather not provision it, remove
-`CODE_SIGN_ENTITLEMENTS` from the two watch targets — the app still starts
-recording via the in-process path.
+`group.com.franklong.wristmemo` is only a cross-process fallback for the launch
+hand-off, and it is **off by default** — a free/personal Apple ID team cannot
+provision App Groups, and the in-process path is what actually carries the
+request. With a paid membership, add `CODE_SIGN_ENTITLEMENTS =
+Config/Watch{App,Controls}.entitlements` back to the two watch targets.
 
-Bundle identifiers are `com.wristmemo.app*`; change them to your own before
-running on a device.
+Bundle identifiers are `com.franklong.wristmemo*` and signing uses Team
+`44X645LJ6H`. Change both if you are building under a different account.
 
 ## Verifying on hardware
 
