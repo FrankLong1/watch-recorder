@@ -1,18 +1,6 @@
 #!/bin/bash
 # Build → install → drive → assert on the watchOS simulator, in one command.
-#
-#   ./sim.sh                    every layer: unit tests, UI taps, harness scenarios
-#   ./sim.sh --unit             Swift Testing logic bundle only (~2s)
-#   ./sim.sh --ui               XCUITest taps only
-#   ./sim.sh --scenario recovery   one harness scenario
-#   ./sim.sh --watch            re-run on save
-#   ./sim.sh --repeat 20        run N times, report any run that differs
-#   ./sim.sh --devices          show what simctl can see right now
-#
-# The simulator cannot test the physical Action button or its real press-to-record
-# latency. `-WristMemoAutoRecord YES` is the supported stand-in for the same
-# in-process request path. Latency numbers here are simulator numbers; see
-# LATENCY.md and run.sh for the device story.
+# `./sim.sh --help` documents every flag; run.sh is the real-hardware counterpart.
 
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -42,7 +30,33 @@ pass() { printf '\033[32m  ✓ %s\033[0m\n' "$1"; }
 fail() { printf '\033[31m  ✗ %s\033[0m\n' "$1" >&2; }
 die()  { printf '\033[31m%s\033[0m\n' "$1" >&2; exit 1; }
 
-usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0; }
+usage() {
+    cat <<'USAGE'
+sim.sh — build, install, drive and assert on the watchOS simulator.
+
+  ./sim.sh                      unit tests, UI taps, and every harness scenario
+  ./sim.sh --unit               Swift Testing logic bundle only (~2s)
+  ./sim.sh --ui                 XCUITest taps only
+  ./sim.sh --scenario NAME      one scenario: record-save|prearm|recovery|latency|all
+  ./sim.sh --watch              re-run on save
+  ./sim.sh --repeat N           run N times; reports any run that differs
+  ./sim.sh --devices            list watch simulators
+
+  --simulator UDID|NAME         which simulator (default: a booted watch, else the first)
+  --record-seconds N            recording length for record-save (default 3)
+  --timeout N                   per-condition poll deadline in seconds (default 45)
+  --max-first-sample-ms N       latency budget (default 20000; simulator, not device)
+  --no-build                    reuse the last build
+  --keep                        keep a screenshot and the parsed index in build/shots
+
+The simulator cannot test the physical Action button or real press-to-record
+latency. -WristMemoAutoRecord is the stand-in for the same in-process request
+path; see LATENCY.md and run.sh for the device story.
+USAGE
+    exit 0
+}
+
+SCENARIOS="record-save prearm recovery latency all"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -50,7 +64,12 @@ while [[ $# -gt 0 ]]; do
         --record-seconds)      RECORD_SECONDS="$2"; shift 2 ;;
         --timeout)             TIMEOUT="$2"; shift 2 ;;
         --max-first-sample-ms) MAX_FIRST_SAMPLE_MS="$2"; shift 2 ;;
-        --scenario)            SCENARIO="$2"; RUN_UNIT=0; RUN_UI=0; shift 2 ;;
+        # Validated here rather than after the build — a typo should not cost a
+        # full compile before it is reported.
+        --scenario)            SCENARIO="$2"; RUN_UNIT=0; RUN_UI=0
+                               [[ " $SCENARIOS " == *" $SCENARIO "* ]] \
+                                   || die "Unknown scenario '$SCENARIO' ($SCENARIOS)"
+                               shift 2 ;;
         --no-build)            DO_BUILD=0; shift ;;
         --keep)                KEEP=1; shift ;;
         --unit)                RUN_UI=0; RUN_HARNESS=0; shift ;;
@@ -130,8 +149,7 @@ APP="$DD/Build/Products/Debug-watchsimulator/$SCHEME.app"
 # has to be re-resolved after any install — caching it once goes stale silently
 # and every file assertion then inspects an empty directory.
 resolve_store() {
-    CONTAINER="$(xcrun simctl get_app_container "$SIM" "$BUNDLE_ID" data)"
-    STORE="$CONTAINER/Library/Application Support/WristMemo"
+    STORE="$(xcrun simctl get_app_container "$SIM" "$BUNDLE_ID" data)/Library/Application Support/WristMemo"
 }
 
 install_app() {
@@ -166,7 +184,6 @@ reset_app_state() {
 }
 
 memo_count()   { python3 -c "import json,sys; print(len(json.load(open(sys.argv[1]))))" "$STORE/memos.json" 2>/dev/null; }
-index_exists() { [[ -f "$STORE/memos.json" ]]; }
 has_memos()    { [[ "$(memo_count || echo 0)" -ge "${1:-1}" ]]; }
 capture_bytes_over() {
     local threshold="$1"
@@ -178,7 +195,7 @@ capture_bytes_over() {
 # Log severity, not string matching: a memo whose text contains "error" is not a
 # failure. messageType comes from the structured log itself.
 assert_log_clean() {
-    local since="$1"
+    local since=$(( $(date +%s) - SCENARIO_START + 5 ))
     local bad
     bad=$(xcrun simctl spawn "$SIM" log show --style ndjson --last "${since}s" \
             --predicate "subsystem == \"$SUBSYSTEM\"" 2>/dev/null \
@@ -216,11 +233,17 @@ PY
 FAILURES=0
 scenario_failed() { fail "$1"; FAILURES=$((FAILURES + 1)); }
 
+# Announce, reset, and mark the start of the log window `assert_log_clean` reads.
+SCENARIO_START=0
+begin_scenario() {
+    bold "scenario: $1"
+    reset_app_state
+    SCENARIO_START=$(date +%s)
+}
+
 # --- scenarios -----------------------------------------------------------------
 scenario_record_save() {
-    bold "scenario: record-save"
-    reset_app_state
-    local started=$(date +%s)
+    begin_scenario record-save
     xcrun simctl launch "$SIM" "$BUNDLE_ID" \
         -WristMemoAutoRecord YES -WristMemoAutoStopAfter "$RECORD_SECONDS" >/dev/null
 
@@ -238,13 +261,11 @@ PY
     then scenario_failed "memo duration wrong"; else pass "duration within tolerance of ${RECORD_SECONDS}s"; fi
 
     if ! assert_index_sorted; then scenario_failed "index ordering"; else pass "index newest-first, no duplicates"; fi
-    if ! assert_log_clean $(( $(date +%s) - started + 5 )); then scenario_failed "log not clean"; else pass "no error/fault log entries"; fi
+    if ! assert_log_clean; then scenario_failed "log not clean"; else pass "no error/fault log entries"; fi
 }
 
 scenario_prearm() {
-    bold "scenario: prearm"
-    reset_app_state
-    local started=$(date +%s)
+    begin_scenario prearm
     xcrun simctl launch "$SIM" "$BUNDLE_ID" >/dev/null
 
     # Idle launch arms the next recorder: exactly one header-only capture.
@@ -257,12 +278,11 @@ scenario_prearm() {
     local size; size=$(find "$STORE/Captures" -name '*.caf' -exec stat -f%z {} \; | head -1)
     if [[ "$n" != "1" ]]; then scenario_failed "expected 1 pre-armed capture, found $n"; else pass "exactly one pre-armed capture"; fi
     if [[ "$size" -gt 20000 ]]; then scenario_failed "pre-arm is $size bytes — expected a header, not audio"; else pass "pre-arm is header-only ($size bytes)"; fi
-    if ! assert_log_clean $(( $(date +%s) - started + 5 )); then scenario_failed "log not clean"; fi
+    if ! assert_log_clean; then scenario_failed "log not clean"; fi
 }
 
 scenario_recovery() {
-    bold "scenario: recovery"
-    reset_app_state
+    begin_scenario recovery
 
     # 1. a normal, current memo
     xcrun simctl launch "$SIM" "$BUNDLE_ID" -WristMemoAutoRecord YES -WristMemoAutoStopAfter 2 >/dev/null
@@ -293,7 +313,7 @@ scenario_recovery() {
     pass "orphan backdated to $birth"
 
     # 4. relaunch idle; startup recovers it
-    local started=$(date +%s)
+    SCENARIO_START=$(date +%s)
     xcrun simctl launch "$SIM" "$BUNDLE_ID" >/dev/null
     if ! poll_until has_memos 2; then scenario_failed "orphan was never recovered"; return; fi
     pass "orphan recovered"
@@ -314,19 +334,17 @@ if first <= last:
 PY
     then scenario_failed "recovered memo sorted to the top instead of by its own date"
     else pass "backdated memo sorts below the current one"; fi
-    if ! assert_log_clean $(( $(date +%s) - started + 5 )); then scenario_failed "log not clean"; fi
+    if ! assert_log_clean; then scenario_failed "log not clean"; fi
 }
 
 scenario_latency() {
-    bold "scenario: latency"
-    reset_app_state
-    local started=$(date +%s)
+    begin_scenario latency
     xcrun simctl launch "$SIM" "$BUNDLE_ID" -WristMemoAutoRecord YES -WristMemoAutoStopAfter 8 >/dev/null
 
     local ms=""
     local deadline=$(( $(date +%s) + TIMEOUT ))
     while (( $(date +%s) < deadline )); do
-        ms=$(xcrun simctl spawn "$SIM" log show --style compact --last "$(( $(date +%s) - started + 5 ))s" \
+        ms=$(xcrun simctl spawn "$SIM" log show --style compact --last "$(( $(date +%s) - SCENARIO_START + 5 ))s" \
                 --predicate "subsystem == \"$SUBSYSTEM\"" 2>/dev/null \
              | sed -n 's/.*\[latency\] first sample at \([0-9]*\)ms.*/\1/p' | tail -1)
         [[ -n "$ms" ]] && break
@@ -387,7 +405,6 @@ run_everything() {
             prearm)       scenario_prearm ;;
             recovery)     scenario_recovery ;;
             latency)      scenario_latency ;;
-            *)            die "Unknown scenario '$SCENARIO' (record-save|prearm|recovery|latency|all)" ;;
         esac
     fi
     if (( KEEP )); then
