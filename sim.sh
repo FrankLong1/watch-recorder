@@ -140,7 +140,11 @@ build_once() {
     xcodebuild build-for-testing -project WristMemo.xcodeproj -scheme "$SCHEME" \
         -destination "id=$SIM" -derivedDataPath "$DD" CODE_SIGNING_ALLOWED=NO > "$DD.log" 2>&1
 }
-build_errors() { grep -E "error:" "$DD.log" | head -20; }
+# `|| true` for the same reason the test diagnostics have it: a grep that
+# matches nothing exits 1, and under `set -e` that would take watch mode down
+# with it — precisely on the failures whose log has no `error:` line, like a
+# simulator that would not connect.
+build_errors() { { grep -E "error:" "$DD.log" || true; } | head -20; }
 
 if (( DO_BUILD )); then
     bold "Building…"

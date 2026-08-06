@@ -1,11 +1,12 @@
 # Real values live in terraform.tfvars, which is gitignored. This repo is
 # public, so nothing here names actual infrastructure.
-project_id = "your-gcp-project-id"
-region     = "us-central1"
-
-# The existing Cloud SQL instance to attach to. This configuration reads it
-# through a data source and never manages it.
-sql_instance_name = "your-shared-sql-instance"
+#
+# `project_id`, `region` and `sql_instance_name` are deliberately absent: the
+# README exports them as TF_VAR_project_id, TF_VAR_region and
+# TF_VAR_sql_instance_name alongside the PROJECT_ID/REGION/SQL_INSTANCE that
+# every later gcloud command reads, so one shell configures the whole deploy.
+# Naming them here would defeat that — a -var-file outranks the environment,
+# so a stale placeholder would silently win over the values you just set.
 
 # Left empty on the first apply so the database, identity, secrets and image
 # repository are created before there is anything to deploy. Fill in the digest

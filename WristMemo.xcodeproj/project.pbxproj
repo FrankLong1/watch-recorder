@@ -10,7 +10,9 @@
 		00A403245E70C13BE6B24EB8 /* Formatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11AEF845835EE62EA196738 /* Formatting.swift */; };
 		042C0798FFC0EEB4780ECCB3 /* RecordingLaunchRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED80ABA31146DD29FA932AD8 /* RecordingLaunchRequest.swift */; };
 		051844B06F859FBFE85BC34D /* MemoStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B7E5BAF41C022ED29C69870 /* MemoStore.swift */; };
+		A1D10C0DEC0DE00000000003 /* AudioCompressorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D10C0DEC0DE00000000002 /* AudioCompressorTests.swift */; };
 		0519FDA3B6CA5A15F48CF39F /* AudioCompressor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7567CDB7BBFB1C0F2E916475 /* AudioCompressor.swift */; };
+		A1D10C0DEC0DE00000000001 /* AudioCompressor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7567CDB7BBFB1C0F2E916475 /* AudioCompressor.swift */; };
 		08F4DB2347CB4D295A0C04A8 /* StartRecordingIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 689CF9FA680CBDFB7F9D75AC /* StartRecordingIntent.swift */; };
 		0A21CF637F7528669B436C47 /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C09AB83111313DD5AD3F8B26 /* Haptics.swift */; };
 		15FF8C1989D0AE5EBAC8362B /* CaptureFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7284322A2995B33A933815B /* CaptureFormat.swift */; };
@@ -117,6 +119,7 @@
 
 /* Begin PBXFileReference section */
 		087FC6EE93EAFFBD66585871 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A1D10C0DEC0DE00000000002 /* AudioCompressorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCompressorTests.swift; sourceTree = "<group>"; };
 		0E289DD08F6F35EA0F25E1EC /* MemoStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MemoStoreTests.swift; sourceTree = "<group>"; };
 		149D488601AE102967EB70A4 /* StartRecordingControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartRecordingControl.swift; sourceTree = "<group>"; };
 		1BCBCD114C6832D0E1F213A1 /* LATENCY.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = LATENCY.md; sourceTree = "<group>"; };
@@ -214,6 +217,7 @@
 			children = (
 				47E9ECE16B2525FB03953904 /* FormattingTests.swift */,
 				0E289DD08F6F35EA0F25E1EC /* MemoStoreTests.swift */,
+				A1D10C0DEC0DE00000000002 /* AudioCompressorTests.swift */,
 				7C64AF06641EFF4C8B85B775 /* RecordingLaunchRequestTests.swift */,
 			);
 			name = WristMemoTests;
@@ -228,6 +232,7 @@
 				689CF9FA680CBDFB7F9D75AC /* StartRecordingIntent.swift */,
 				F11AEF845835EE62EA196738 /* Formatting.swift */,
 				C264870A06619121DFC7D192 /* AudioDuration.swift */,
+				7567CDB7BBFB1C0F2E916475 /* AudioCompressor.swift */,
 				BC8FD2BAB5E79615B2504C37 /* AccessibilityID.swift */,
 			);
 			path = Shared;
@@ -240,7 +245,6 @@
 				5CE93DA78512CAEA42DBEE5B /* WristMemoWatchApp.swift */,
 				7591B32180C3ACA7897C76F6 /* RecorderModel.swift */,
 				9636ABE0F73C0A620F2F5F18 /* RecordingEngine.swift */,
-				7567CDB7BBFB1C0F2E916475 /* AudioCompressor.swift */,
 				A6D4D2B86FC1E24980761A25 /* Memo.swift */,
 				9B7E5BAF41C022ED29C69870 /* MemoStore.swift */,
 				796A3395BAC882FAE5DD6938 /* WatchSyncClient.swift */,
@@ -581,6 +585,7 @@
 				D0694CC41CABB3130B7B85BA /* SharedConfig.swift in Sources */,
 				00A403245E70C13BE6B24EB8 /* Formatting.swift in Sources */,
 				2E8E95D0F1B313CEDEC8A8C3 /* AudioDuration.swift in Sources */,
+				A1D10C0DEC0DE00000000001 /* AudioCompressor.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -614,6 +619,7 @@
 			files = (
 				7EFABCEA5A668807D9932649 /* FormattingTests.swift in Sources */,
 				F6A55909190FAD8C9B981694 /* MemoStoreTests.swift in Sources */,
+				A1D10C0DEC0DE00000000003 /* AudioCompressorTests.swift in Sources */,
 				6DD94C7D823555C9ED2E333E /* RecordingLaunchRequestTests.swift in Sources */,
 				DA7BAF948960537B54CA6AC2 /* Formatting.swift in Sources */,
 				042C0798FFC0EEB4780ECCB3 /* RecordingLaunchRequest.swift in Sources */,

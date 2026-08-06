@@ -33,7 +33,7 @@ final class WristMemoAppDelegate: NSObject, UIApplicationDelegate {
 struct WristMemoApp: App {
 
     @UIApplicationDelegateAdaptor(WristMemoAppDelegate.self) private var appDelegate
-    @State private var library = PhoneLibrary()
+    @State private var library = PhoneLibrary.shared
 
     var body: some Scene {
         WindowGroup {
@@ -44,9 +44,12 @@ struct WristMemoApp: App {
                 }
         }
         // The system relaunches the app when a background upload finishes while
-        // it is not running. Without this the transfer completes but its
-        // delegate callback is never delivered, so the memo would stay marked
-        // as uploading and be sent again.
-        .backgroundTask(.urlSession(TranscriptionClient.sessionIdentifier)) { }
+        // it is not running. That launch builds no window, so the `.task` above
+        // never runs: the library has to be started here instead, or the
+        // session is rebuilt with no delegate and the completion is delivered
+        // nowhere — leaving the memo marked uploading and sent again later.
+        .backgroundTask(.urlSession(TranscriptionClient.sessionIdentifier)) {
+            await PhoneLibrary.shared.handleBackgroundSessionEvents(finishing: appDelegate)
+        }
     }
 }

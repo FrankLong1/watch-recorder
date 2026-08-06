@@ -10,7 +10,12 @@ import { Hono } from "hono";
 import { loadConfig } from "./config";
 import { createMemoStore, DatabaseUnavailableError, MemoInProgressError } from "./db";
 import { parseRoute } from "./routing";
-import { transcribe, TranscriptionError } from "./transcribe";
+import {
+  audioFormat,
+  transcribe,
+  TranscriptionError,
+  transcriptionFailureStatus,
+} from "./transcribe";
 
 const config = loadConfig();
 const store = createMemoStore(config.database);
@@ -79,6 +84,14 @@ app.post("/v1/memos/:id", async (c) => {
     return c.json({ error: "audio too large" }, 413);
   }
 
+  // Terminal, like every other 4xx here: the phone must stop resending bytes
+  // nothing downstream can decode. Relabelling them as m4a instead would send
+  // the transcription service a file it mis-reads and bill for the privilege.
+  const contentType = audioFormat(c.req.header("content-type"));
+  if (!contentType) {
+    return c.json({ error: "unsupported audio format" }, 415);
+  }
+
   const audio = c.req.raw.body;
   if (!audio) {
     return c.json({ error: "body is required" }, 400);
@@ -101,6 +114,7 @@ app.post("/v1/memos/:id", async (c) => {
         apiKey: config.openaiApiKey,
         baseUrl: config.openaiBaseUrl,
         model: config.openaiModel,
+        contentType,
         signal: AbortSignal.timeout(4 * 60 * 1000),
       });
 
@@ -139,7 +153,7 @@ app.post("/v1/memos/:id", async (c) => {
     }
     if (error instanceof TranscriptionError) {
       log("transcription failed", { id, detail: error.message });
-      return c.json({ error: "transcription failed" }, error.retryable ? 502 : 500);
+      return c.json({ error: "transcription failed" }, transcriptionFailureStatus(error));
     }
     log("unhandled error", { id, detail: error instanceof Error ? error.name : "unknown" });
     return c.json({ error: "internal error" }, 500);
