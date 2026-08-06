@@ -134,12 +134,17 @@ xcrun simctl bootstatus "$SIM" -b >/dev/null 2>&1 || die "Simulator never finish
 # writes logs and derived data there.
 mkdir -p "$(dirname "$DD")"
 
+# build-for-testing so --repeat and both test bundles reuse a single build.
+# Shared with watch mode, which rebuilds on every save.
+build_once() {
+    xcodebuild build-for-testing -project WristMemo.xcodeproj -scheme "$SCHEME" \
+        -destination "id=$SIM" -derivedDataPath "$DD" CODE_SIGNING_ALLOWED=NO > "$DD.log" 2>&1
+}
+build_errors() { grep -E "error:" "$DD.log" | head -20; }
+
 if (( DO_BUILD )); then
     bold "Building…"
-    # build-for-testing so --repeat and the test bundles reuse one build.
-    xcodebuild build-for-testing -project WristMemo.xcodeproj -scheme "$SCHEME" \
-        -destination "id=$SIM" -derivedDataPath "$DD" CODE_SIGNING_ALLOWED=NO \
-        > "$DD.log" 2>&1 || { grep -E "error:" "$DD.log" | head -20; die "Build failed (full log: $DD.log)"; }
+    build_once || { build_errors; die "Build failed (full log: $DD.log)"; }
 fi
 
 APP="$DD/Build/Products/Debug-watchsimulator/$SCHEME.app"
@@ -419,19 +424,20 @@ run_everything() {
 # --- watch mode ----------------------------------------------------------------
 # Plain mtime polling: fswatch/entr/watchexec are not installed and this needs
 # no new dependencies.
+WATCHED="WatchApp Shared WatchControls WristMemoTests WristMemoUITests"
 if (( WATCH )); then
-    bold "Watching WatchApp/ Shared/ WatchControls/ — ctrl-C to stop"
+    bold "Watching $WATCHED — ctrl-C to stop"
     last=""
     while true; do
-        now=$(find WatchApp Shared WatchControls WristMemoTests WristMemoUITests \
-                -name '*.swift' -exec stat -f '%m %N' {} \; 2>/dev/null | sort | md5)
+        now=$(find $WATCHED -name '*.swift' -exec stat -f '%m %N' {} \; 2>/dev/null | sort | md5)
         if [[ "$now" != "$last" ]]; then
             last="$now"
             printf '\n\033[1m--- %s ---\033[0m\n' "$(date +%H:%M:%S)"
-            xcodebuild build-for-testing -project WristMemo.xcodeproj -scheme "$SCHEME" \
-                -destination "id=$SIM" -derivedDataPath "$DD" CODE_SIGNING_ALLOWED=NO \
-                > "$DD.log" 2>&1 && install_app && { run_everything && bold "green" || warn "$FAILURES failure(s)"; } \
-                || { grep -E "error:" "$DD.log" | head -10; warn "build failed"; }
+            if build_once && install_app; then
+                run_everything && bold "green" || warn "$FAILURES failure(s)"
+            else
+                build_errors; warn "build failed"
+            fi
         fi
         sleep 1
     done
