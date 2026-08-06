@@ -274,18 +274,74 @@ sanctioned rather than a hack.
 > **starting** faster. The session can't be held open without an active
 > recording, so first-press cold start remains.
 
-**…unless we run the ring buffer.** Continuous capture into a circular buffer
-*is* recording, which legitimately sustains the audio-recording session, which
-keeps the app resident, which makes every press warm **and** yields negative
-latency. Three problems, one mechanism. Costs: battery, and an "always
-recording" posture needing a persistent indicator and surviving App Review
-scrutiny. It is the only design where the pieces reinforce rather than fight.
+**…unless we run the ring buffer** — but see the risk assessment below before
+treating this as the answer. Technically: continuous capture into a circular
+buffer *is* recording, which sustains the audio-recording session, which keeps
+the app resident, which makes every press warm **and** yields negative latency.
+Three problems, one mechanism. **The costs are much higher than "battery and
+optics," which is how an earlier draft of this doc framed it.** See §4.1b.
 
 **Fragility warning** *[verified — multiple developer reports]*: background audio
 on watchOS is unreliable **after interruptions**. An incoming call or competing
 audio app can reclaim the session, and background resume frequently fails. Plan
 an explicit user re-entry flow; never assume a long unattended recording
 survives.
+
+### 4.1b Ring buffer — risk assessment
+
+**Recommendation: do not ship the 30-second always-on version.**
+
+**What it is.** A fixed-size block of RAM written continuously; on reaching the
+end it wraps and overwrites the oldest samples. Always holds the last N seconds,
+never grows. 30s of 16 kHz mono 16-bit PCM ≈ **1 MB**. Memory is not the problem.
+
+**The mic is always on.** There is no version where it isn't.
+
+| | Ring buffer | Recording |
+|---|---|---|
+| Mic | **On** | On |
+| Samples in RAM | Yes, continuously overwritten | Yes |
+| Written to disk | **No** | Yes |
+
+"Always listening, never saving" is a real technical distinction, but **the gap
+between the two columns is one line of code.** A bug, a future feature, or a bad
+merge converts passive capture into surveillance — a failure mode that is hard to
+detect externally and hard to disprove.
+
+**Risk 1 — retroactive capture and consent. This is the serious one.**
+
+In two-party / all-party consent jurisdictions (CA, FL, PA, IL, WA, MA, ~a dozen
+US states, much of Europe), recording without every participant's consent is a
+**criminal** matter. A ring buffer persists audio from *before the user decided
+to record*. The button press is the moment of intent; the preceding N seconds
+captured people who had **no signal that recording was about to begin** and no
+opportunity to object. Retroactive capture of third-party speech is close to the
+precise conduct wiretap statutes target.
+
+The user's own voice is fine. Everyone else in the room is the exposure.
+
+**Risk 2 — App Review.** Continuous mic access draws hard scrutiny, and "it
+reduces launch latency" is a weak justification from Apple's side. Treat
+rejection as likely, not theoretical.
+
+**Risk 3 — memory disclosure.** The buffer holds ambient audio in RAM. Crash
+dumps and logs must explicitly exclude it.
+
+**Risk 4 — trust posture.** Product-specific and possibly decisive: users will
+speak proprietary investment theses into this app. An always-on mic is the worst
+possible trust position for exactly that audience.
+
+**Defensible middle ground, if lookback is still wanted after measuring:**
+
+- **3 seconds**, not 30 — catches "so, Apple's margins —" without capturing a
+  conversation
+- **Gated on wrist-raise** — mic off the vast majority of the day
+- **Opt-in, off by default**
+- Persistent visible indicator; zero the buffer on background/lock
+- Never write the buffer to disk unless the button was pressed
+
+**Do this first:** measure cold start. At ~800ms this is all moot. At ~3s, try
+pre-warming plus haptic-on-hot before accepting any always-on mic.
 
 ### 4.2 Where processing happens
 

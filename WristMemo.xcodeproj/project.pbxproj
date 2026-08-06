@@ -18,6 +18,8 @@
 		051844B06F859FBFE85BC34D /* MemoStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B7E5BAF41C022ED29C69870 /* MemoStore.swift */; };
 		60649AE238BFC7F2C4EB9E7C /* WatchSyncClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 796A3395BAC882FAE5DD6938 /* WatchSyncClient.swift */; };
 		0A21CF637F7528669B436C47 /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C09AB83111313DD5AD3F8B26 /* Haptics.swift */; };
+		22EE4CCBB83A57337C524A5B /* Latency.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98476918AFD99F213671DBBA /* Latency.swift */; };
+		1FB3CBFFE3BF695E6ED7D77A /* BackgroundWarmth.swift in Sources */ = {isa = PBXBuildFile; fileRef = B83077545BDC6589B95E6BB6 /* BackgroundWarmth.swift */; };
 		E150BA263B42FD92EBA622D7 /* WristMemoShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F65A747EC963F2F4CD5E5E9 /* WristMemoShortcuts.swift */; };
 		D0B4201C2391811C86476E29 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32803F96509DBEDEB9BE8B7B /* RootView.swift */; };
 		6BADECA4CB17F1337F041EF8 /* RecordingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D217F2ED7DCF130FCCDF1377 /* RecordingView.swift */; };
@@ -29,6 +31,7 @@
 		08F4DB2347CB4D295A0C04A8 /* StartRecordingIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 689CF9FA680CBDFB7F9D75AC /* StartRecordingIntent.swift */; };
 		90AC0C21AE4BB7CC36E16120 /* ControlsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F424B12DE56E9CAD6F4DE5 /* ControlsBundle.swift */; };
 		6DC7C8D5DF8BCE1F550DB1DD /* StartRecordingControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 149D488601AE102967EB70A4 /* StartRecordingControl.swift */; };
+		6AE6462E492BF876F118B903 /* RecordComplication.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6611803E2A2D98328D042CA9 /* RecordComplication.swift */; };
 		6C2B0A927FEFE95F323931CF /* SharedConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A0075E4CFD286E9FE8E7D55 /* SharedConfig.swift */; };
 		DA760E8063D8F46C1EE1984D /* RecordingLaunchRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED80ABA31146DD29FA932AD8 /* RecordingLaunchRequest.swift */; };
 		F5AA306BB4BDC8B76812D9D1 /* StartRecordingIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 689CF9FA680CBDFB7F9D75AC /* StartRecordingIntent.swift */; };
@@ -92,6 +95,8 @@
 		9B7E5BAF41C022ED29C69870 /* MemoStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MemoStore.swift"; sourceTree = "<group>"; };
 		796A3395BAC882FAE5DD6938 /* WatchSyncClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WatchSyncClient.swift"; sourceTree = "<group>"; };
 		C09AB83111313DD5AD3F8B26 /* Haptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Haptics.swift"; sourceTree = "<group>"; };
+		98476918AFD99F213671DBBA /* Latency.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Latency.swift"; sourceTree = "<group>"; };
+		B83077545BDC6589B95E6BB6 /* BackgroundWarmth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BackgroundWarmth.swift"; sourceTree = "<group>"; };
 		2F65A747EC963F2F4CD5E5E9 /* WristMemoShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WristMemoShortcuts.swift"; sourceTree = "<group>"; };
 		32803F96509DBEDEB9BE8B7B /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RootView.swift"; sourceTree = "<group>"; };
 		D217F2ED7DCF130FCCDF1377 /* RecordingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RecordingView.swift"; sourceTree = "<group>"; };
@@ -101,6 +106,7 @@
 		087FC6EE93EAFFBD66585871 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Assets.xcassets"; sourceTree = "<group>"; };
 		C7F424B12DE56E9CAD6F4DE5 /* ControlsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ControlsBundle.swift"; sourceTree = "<group>"; };
 		149D488601AE102967EB70A4 /* StartRecordingControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StartRecordingControl.swift"; sourceTree = "<group>"; };
+		6611803E2A2D98328D042CA9 /* RecordComplication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RecordComplication.swift"; sourceTree = "<group>"; };
 		2485CEB2051BDEF12B42AF21 /* WristMemoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WristMemoApp.swift"; sourceTree = "<group>"; };
 		6FE33FF418EC40F4790A1578 /* PhoneLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PhoneLibrary.swift"; sourceTree = "<group>"; };
 		7FF4F345E89E8DB8E583DC96 /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LibraryView.swift"; sourceTree = "<group>"; };
@@ -113,6 +119,8 @@
 		B66BCDC810D3FCEA23D284EF /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "README.md"; sourceTree = "<group>"; };
 		6D693E0FFF8AA9931D983AE7 /* DESIGN.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "DESIGN.md"; sourceTree = "<group>"; };
 		905084BEEFE55F50CE33F036 /* LIMITATIONS.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "LIMITATIONS.md"; sourceTree = "<group>"; };
+		1BCBCD114C6832D0E1F213A1 /* LATENCY.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "LATENCY.md"; sourceTree = "<group>"; };
+		6B2531C1BED13C6557ADAE32 /* DEVICE_TESTING.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "DEVICE_TESTING.md"; sourceTree = "<group>"; };
 		57157261AC48F9302A3B476E /* WristMemo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "WristMemo.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		ABB217AE039EB9EFED5B9F29 /* WristMemo Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "WristMemo Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		6249C2783F0DC1188AF10FD6 /* WristMemoControls.appex */ = {isa = PBXFileReference; explicitFileType = wrapper.app-extension; includeInIndex = 0; path = "WristMemoControls.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -178,6 +186,8 @@
 				9B7E5BAF41C022ED29C69870 /* MemoStore.swift */,
 				796A3395BAC882FAE5DD6938 /* WatchSyncClient.swift */,
 				C09AB83111313DD5AD3F8B26 /* Haptics.swift */,
+				98476918AFD99F213671DBBA /* Latency.swift */,
+				B83077545BDC6589B95E6BB6 /* BackgroundWarmth.swift */,
 				2F65A747EC963F2F4CD5E5E9 /* WristMemoShortcuts.swift */,
 				087FC6EE93EAFFBD66585871 /* Assets.xcassets */,
 			);
@@ -201,6 +211,7 @@
 			children = (
 				C7F424B12DE56E9CAD6F4DE5 /* ControlsBundle.swift */,
 				149D488601AE102967EB70A4 /* StartRecordingControl.swift */,
+				6611803E2A2D98328D042CA9 /* RecordComplication.swift */,
 			);
 			path = WatchControls;
 			sourceTree = "<group>";
@@ -234,6 +245,8 @@
 				B66BCDC810D3FCEA23D284EF /* README.md */,
 				6D693E0FFF8AA9931D983AE7 /* DESIGN.md */,
 				905084BEEFE55F50CE33F036 /* LIMITATIONS.md */,
+				1BCBCD114C6832D0E1F213A1 /* LATENCY.md */,
+				6B2531C1BED13C6557ADAE32 /* DEVICE_TESTING.md */,
 			);
 			name = Docs;
 			sourceTree = "<group>";
@@ -396,6 +409,8 @@
 				051844B06F859FBFE85BC34D /* MemoStore.swift in Sources */,
 				60649AE238BFC7F2C4EB9E7C /* WatchSyncClient.swift in Sources */,
 				0A21CF637F7528669B436C47 /* Haptics.swift in Sources */,
+				22EE4CCBB83A57337C524A5B /* Latency.swift in Sources */,
+				1FB3CBFFE3BF695E6ED7D77A /* BackgroundWarmth.swift in Sources */,
 				E150BA263B42FD92EBA622D7 /* WristMemoShortcuts.swift in Sources */,
 				D0B4201C2391811C86476E29 /* RootView.swift in Sources */,
 				6BADECA4CB17F1337F041EF8 /* RecordingView.swift in Sources */,
@@ -414,6 +429,7 @@
 			files = (
 				90AC0C21AE4BB7CC36E16120 /* ControlsBundle.swift in Sources */,
 				6DC7C8D5DF8BCE1F550DB1DD /* StartRecordingControl.swift in Sources */,
+				6AE6462E492BF876F118B903 /* RecordComplication.swift in Sources */,
 				6C2B0A927FEFE95F323931CF /* SharedConfig.swift in Sources */,
 				DA760E8063D8F46C1EE1984D /* RecordingLaunchRequest.swift in Sources */,
 				F5AA306BB4BDC8B76812D9D1 /* StartRecordingIntent.swift in Sources */,

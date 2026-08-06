@@ -69,6 +69,9 @@ Then press it.
 
 Verified by actually running on the Apple Watch Ultra 3 simulator:
 
+- **Full cycle end to end**: launch → auto-record → stop → compress → save,
+  producing a 5.27 s AAC memo, index written, capture directory cleaned
+
 - App launches and renders on a 49mm Ultra screen
 - First-run microphone permission screen
 - **Launch-straight-into-recording** — the same `startRequested` path the Action
@@ -104,6 +107,10 @@ xcrun simctl privacy $SIM grant microphone com.franklong.wristmemo.watchkitapp
 
 # launch straight into recording, exactly as the Action button would
 xcrun simctl launch $SIM com.franklong.wristmemo.watchkitapp -WristMemoAutoRecord YES
+
+# or the whole pipeline unattended: record, then stop and save after 5s
+xcrun simctl launch $SIM com.franklong.wristmemo.watchkitapp \
+  -WristMemoAutoRecord YES -WristMemoAutoStopAfter 5
 xcrun simctl io $SIM screenshot /tmp/shot.png
 ```
 

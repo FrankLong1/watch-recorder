@@ -25,7 +25,8 @@ Ultra. Setup and the remaining checklist: [DEVICE_TESTING.md](DEVICE_TESTING.md)
 4. **Stop & Save** commits the memo; **Cancel** discards it; **Pause** holds.
 5. The memo is compressed to AAC, stored on the watch, and queued for the iPhone.
 
-Design rationale: [DESIGN.md](DESIGN.md). What Apple does not allow:
+Design rationale: [DESIGN.md](DESIGN.md). How the press-to-recording time is
+attacked and hidden: [LATENCY.md](LATENCY.md). What Apple does not allow:
 [LIMITATIONS.md](LIMITATIONS.md).
 
 ## Assigning it to the Action button

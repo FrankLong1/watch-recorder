@@ -25,6 +25,10 @@ enum SharedConfig {
     /// already configured, so treat it as permanent.
     static let recordControlKind = "com.franklong.wristmemo.control.start-recording"
 
+    /// Watch-face complication. Keeping one on the active face is what nudges
+    /// the system to hold the app in memory — see LATENCY.md.
+    static let complicationKind = "com.franklong.wristmemo.complication.record"
+
     static var sharedDefaults: UserDefaults? {
         UserDefaults(suiteName: appGroupIdentifier)
     }

@@ -1,5 +1,9 @@
 import SwiftUI
 
+/// The screen the Action button lands on.
+///
+/// Kept deliberately plain: at a glance, from a wrist, the only questions are
+/// "is it recording?" and "how long?". Everything else is one tap away or gone.
 struct RecordingView: View {
 
     @Environment(RecorderModel.self) private var model
@@ -7,21 +11,29 @@ struct RecordingView: View {
     private var isPaused: Bool { model.phase == .paused }
 
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 8) {
             statusRow
             timer
             LevelMeter(level: model.level, isActive: !isPaused)
-                .frame(height: 18)
+                .frame(height: 16)
             controls
+
+            #if DEBUG
+            if let milliseconds = model.lastStartLatencyMilliseconds {
+                Text("\(Int(milliseconds))ms to first sample")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+            }
+            #endif
         }
         .padding(.horizontal, 4)
     }
 
     private var statusRow: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 6) {
             RecordingDot(isAnimating: !isPaused)
             Text(isPaused ? "PAUSED" : "RECORDING")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(isPaused ? Color.secondary : Color.red)
                 .monospaced()
         }
@@ -29,30 +41,23 @@ struct RecordingView: View {
 
     private var timer: some View {
         Text(model.elapsed.recordingClock)
-            .font(.system(size: 38, weight: .semibold, design: .rounded))
+            .font(.system(size: 42, weight: .semibold, design: .rounded))
             // Fixed-width digits stop the timer jittering as numbers change.
             .monospacedDigit()
             .minimumScaleFactor(0.6)
             .lineLimit(1)
-            .contentTransition(.numericText())
     }
 
+    /// Two buttons, not three. Pause still exists internally for phone-call
+    /// interruptions, but a demo does not need a third target on a 49mm screen.
     private var controls: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 14) {
             CircleButton(
                 systemImage: "xmark",
                 tint: .secondary,
-                accessibilityLabel: "Cancel recording"
+                accessibilityLabel: "Discard recording"
             ) {
                 model.cancelRecording()
-            }
-
-            CircleButton(
-                systemImage: isPaused ? "mic.fill" : "pause.fill",
-                tint: .orange,
-                accessibilityLabel: isPaused ? "Resume recording" : "Pause recording"
-            ) {
-                model.togglePause()
             }
 
             CircleButton(
@@ -76,7 +81,7 @@ private struct RecordingDot: View {
     var body: some View {
         Circle()
             .fill(.red)
-            .frame(width: 9, height: 9)
+            .frame(width: 10, height: 10)
             .opacity(dim ? 0.25 : 1)
             .animation(
                 isAnimating ? .easeInOut(duration: 0.7).repeatForever(autoreverses: true) : .default,
@@ -112,7 +117,7 @@ private struct LevelMeter: View {
         let centre = Double(barCount - 1) / 2
         let distance = abs(Double(index) - centre) / centre
         let envelope = 1 - (distance * 0.65)
-        return max(3, 18 * envelope * (isActive ? max(0.12, level) : 0.12))
+        return max(3, 16 * envelope * (isActive ? max(0.12, level) : 0.12))
     }
 }
 
@@ -126,9 +131,9 @@ private struct CircleButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: filled ? 19 : 15, weight: .semibold))
+                .font(.system(size: filled ? 22 : 16, weight: .semibold))
                 .foregroundStyle(filled ? Color.white : tint)
-                .frame(width: filled ? 50 : 38, height: filled ? 50 : 38)
+                .frame(width: filled ? 58 : 42, height: filled ? 58 : 42)
                 .background(filled ? tint : Color.white.opacity(0.14), in: .circle)
         }
         .buttonStyle(.plain)

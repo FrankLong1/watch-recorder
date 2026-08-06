@@ -119,10 +119,16 @@ running into a circular buffer holding the last N seconds. On press, persist the
 buffer *retroactively*. You capture words spoken **before** the button press.
 
 C is the only strategy that makes latency stop mattering instead of merely
-shrinking it. It's also the one that costs battery and carries the worst privacy
-optics, so it needs to be explicit, user-controlled, and clearly indicated. But
-if it works, it converts the hardest engineering problem into a feature nobody
-else ships.
+shrinking it. **But do not ship the 30-second always-on version** — see
+[docs/trigger-mechanisms.md §4.1b](docs/trigger-mechanisms.md). The blocker isn't
+battery or "privacy optics" (how this was framed in an earlier draft); it's that
+retroactive capture persists audio from **before the user decided to record**,
+which means third parties who had no signal recording was starting. In two-party
+consent jurisdictions that is a criminal exposure, not a UX concern.
+
+If lookback survives measurement, the defensible shape is **3 seconds, gated on
+wrist-raise, opt-in, off by default** — enough to catch the first few words,
+short enough not to capture a conversation, and with the mic off most of the day.
 
 **Perceptual trick regardless of which you pick:** fire the haptic at the moment
 the mic actually goes hot, not on the button press. The user's instinct is to

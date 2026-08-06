@@ -46,7 +46,18 @@ final class MemoStore {
 
     // MARK: - Index
 
-    func load() {
+    private var didLoad = false
+
+    /// Idempotent, and never on the recording hot path. `finalize` calls it too:
+    /// saving before the index has loaded would persist an array containing only
+    /// the new memo and orphan every earlier one.
+    func loadIfNeeded() {
+        guard !didLoad else { return }
+        didLoad = true
+        load()
+    }
+
+    private func load() {
         do {
             try createDirectories()
             let data = try Data(contentsOf: indexURL)
@@ -92,6 +103,7 @@ final class MemoStore {
     /// If compression fails the capture is kept as-is rather than thrown away —
     /// a large memo beats a lost one.
     func finalize(captureURL: URL, id: UUID, recovered: Bool = false) async -> Memo? {
+        loadIfNeeded()
         guard fileManager.fileExists(atPath: captureURL.path) else { return nil }
 
         let attributes = try? fileManager.attributesOfItem(atPath: captureURL.path)
@@ -144,12 +156,17 @@ final class MemoStore {
 
     /// Rebuilds memos from captures left behind by a previous run.
     ///
-    /// Called once at launch, before any new recording claims a capture path.
+    /// Runs *after* recording may already have started — the launch path no
+    /// longer waits for it — so anything the engine currently owns has to be
+    /// excluded. Without that, recovery would transcode and delete the file
+    /// being recorded into right now.
     @discardableResult
-    func recoverOrphanedCaptures() async -> [Memo] {
+    func recoverOrphanedCaptures(excluding inFlight: Set<URL> = []) async -> [Memo] {
+        loadIfNeeded()
         try? createDirectories()
+        let claimed = Set(inFlight.map(\.standardizedFileURL))
         let orphans = (try? fileManager.contentsOfDirectory(at: capturesDirectory, includingPropertiesForKeys: nil))?
-            .filter { $0.pathExtension == "caf" } ?? []
+            .filter { $0.pathExtension == "caf" && !claimed.contains($0.standardizedFileURL) } ?? []
 
         var recoveredMemos: [Memo] = []
         for orphan in orphans {
