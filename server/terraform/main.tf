@@ -3,7 +3,7 @@ locals {
   database_user   = trimsuffix(google_service_account.ingest.email, ".gserviceaccount.com")
 }
 
-# The instance belongs to slop-apps/infra/agent-inbox/terraform. Reading it
+# The instance belongs to a separate, private Terraform configuration. Reading it
 # through a data source means this configuration can attach a database and a
 # service to it without ever being able to modify or destroy it.
 data "google_sql_database_instance" "shared" {
@@ -25,7 +25,7 @@ resource "google_project_service" "required" {
 
 # --- Database -----------------------------------------------------------------
 
-# Its own database rather than a schema in agent_inbox, so the blast radius of
+# Its own database rather than a schema in the neighbour, so the blast radius of
 # anything WristMemo does stops at the database boundary.
 resource "google_sql_database" "wristmemo" {
   project  = var.project_id
@@ -35,7 +35,7 @@ resource "google_sql_database" "wristmemo" {
 
 # Schema owner, used only by scripts/migrate.sh. Kept separate from the ingest
 # identity so the running service can never alter its own schema, and separate
-# from the agent inbox's migrator so neither project's migrations can touch the
+# from the neighbour's migrator so neither project's migrations can touch the
 # other's tables. Keyless — the operator impersonates it for the duration of a
 # migration.
 resource "google_service_account" "migrator" {
@@ -77,7 +77,7 @@ resource "google_service_account" "ingest" {
   project      = var.project_id
   account_id   = var.ingest_service_account_id
   display_name = "WristMemo ingest"
-  description  = "Cloud Run identity for WristMemo transcript ingest. No access to the agent inbox."
+  description  = "Cloud Run identity for WristMemo transcript ingest. No access to the neighbouring service."
 }
 
 resource "google_project_iam_member" "ingest_cloudsql_client" {

@@ -3,7 +3,7 @@
 /// Connects over the Unix socket that Cloud Run mounts from its
 /// `cloud_sql_instance` volume, authenticating with the service account's own
 /// IAM token rather than a password. This mirrors the established pattern in
-/// `slop-apps/src/apps/inbox/src/server/agent-inbox.ts`, which is the working
+/// a sibling private project's queue service, which is the working
 /// reference for this instance.
 
 import { SQL } from "bun";

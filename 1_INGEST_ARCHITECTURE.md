@@ -1,7 +1,7 @@
 # Architecture 1 — capture to transcript
 
 **Date:** 2026-08-06
-**Status:** **live.** Deployed to `gv-data-platform` and verified end to end.
+**Status:** **live.** Deployed and verified end to end.
 
 Covers everything up to the moment a transcript is committed. After that is
 [2_AGENT_ARCHITECTURE.md](2_AGENT_ARCHITECTURE.md).
@@ -30,7 +30,7 @@ flowchart LR
         W -->|"WCSession<br/>transferFile"| P
     end
 
-    subgraph GCP["☁️ gv-data-platform — text only, no audio at rest"]
+    subgraph GCP["☁️ GCP — text only, no audio at rest"]
         direction TB
         SM["🔑 Secret Manager<br/>OPENAI_API_KEY"]
         CR["Cloud Run: wristmemo-ingest<br/><b>audio in memory only</b>"]
@@ -150,17 +150,17 @@ A leaked OpenAI key is the whole account.
 
 ## Sharing the instance
 
-WristMemo runs on the Cloud SQL instance that `slop-apps/infra/agent-inbox`
-owns, so it gets its own database, service account and SQL role — never a schema
-inside `agent_inbox`. Verified live: the ingest identity is refused on the
-neighbour, *permission denied for schema agent_inbox*.
+WristMemo runs on a Cloud SQL instance owned by a separate, private project, so
+it gets its own database, service account and SQL role — never a schema inside
+the neighbour's. Verified live: the ingest identity is refused on the
+neighbouring schema, *permission denied*.
 
 That reuse is also why Postgres cost nothing here, which is what killed the case
 for Firestore. Running total is ~$1–2/month, essentially all OpenAI.
 
 **The risk worth naming:** `db-f1-micro` is shared-core. Capacity isn't the
 concern — memos are single-digit MB — but a runaway WristMemo query would
-degrade the agent inbox too.
+degrade the neighbouring service too.
 
 ---
 

@@ -32,8 +32,23 @@ final class TranscriptionClient: NSObject {
     /// Created once. Constructing two background sessions with the same
     /// identifier traps.
     private lazy var session: URLSession = {
-        let configuration = URLSessionConfiguration.background(withIdentifier: Self.sessionIdentifier)
+        let configuration: URLSessionConfiguration
+
+        #if targetEnvironment(simulator)
+        // The simulator has no background transfer daemon, so every upload on a
+        // background session fails with NSURLErrorUnknown before it leaves the
+        // machine. A default session lets the simulator exercise the request,
+        // the auth, the retry policy and the state machine.
+        //
+        // It deliberately does NOT prove the thing that matters most on device —
+        // that an upload survives the app being suspended. Only hardware can
+        // show that.
+        configuration = .default
+        #else
+        configuration = .background(withIdentifier: Self.sessionIdentifier)
         configuration.sessionSendsLaunchEvents = true
+        #endif
+
         configuration.isDiscretionary = false
         configuration.waitsForConnectivity = true
         return URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
@@ -229,16 +244,20 @@ enum IngestCredentials {
 
     static var current: Credentials? {
         let environment = ProcessInfo.processInfo.environment
+        let environmentURL = environment[urlKey]?.trimmed.nilIfEmpty
+        let environmentToken = environment[tokenKey]?.trimmed.nilIfEmpty
 
-        if let urlString = environment[urlKey]?.trimmed, !urlString.isEmpty {
-            keychainSet(urlKey, urlString)
-        }
-        if let token = environment[tokenKey]?.trimmed, !token.isEmpty {
-            keychainSet(tokenKey, token)
-        }
+        // Persistence is best-effort and must not gate the values. An unsigned
+        // simulator build has no keychain entitlement, so this write fails —
+        // and reading back through the keychain would then discard credentials
+        // the environment had supplied perfectly well.
+        if let environmentURL { keychainSet(urlKey, environmentURL) }
+        if let environmentToken { keychainSet(tokenKey, environmentToken) }
 
-        guard let urlString = keychainGet(urlKey),
-              let token = keychainGet(tokenKey),
+        // Environment wins when present; the keychain is the fallback that makes
+        // later launches work without it.
+        guard let urlString = environmentURL ?? keychainGet(urlKey),
+              let token = environmentToken ?? keychainGet(tokenKey),
               // A relative URL needs the trailing slash or the last path
               // component is replaced rather than appended.
               let baseURL = URL(string: urlString.hasSuffix("/") ? urlString : urlString + "/"),
@@ -291,4 +310,5 @@ enum IngestCredentials {
 
 private extension String {
     var trimmed: String { trimmingCharacters(in: .whitespacesAndNewlines) }
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

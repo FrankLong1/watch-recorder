@@ -15,7 +15,7 @@
 | watchOS platform | **26.5 installed** (`xcodebuild -downloadPlatform watchOS`) — was missing, which is why no device or simulator destination existed |
 | iOS platform | **26.5 installed** (`xcodebuild -downloadPlatform iOS`) |
 | Simulators | Apple Watch Ultra 3 (49mm), Series 11, SE 3 + iPhone, all watchOS/iOS 26.5 |
-| Signing identity | `Apple Development: fylong00@gmail.com`, **Team 44X645LJ6H**, already in the login keychain |
+| Signing identity | An `Apple Development` certificate for the team below, already in the login keychain |
 | Project signing | `DEVELOPMENT_TEAM = 44X645LJ6H` set at project level, inherited by all three targets |
 | Bundle IDs | `com.franklong.wristmemo{,.watchkitapp,.watchkitapp.controls}` |
 | App Groups | Not used — the launch hand-off is in-process, so nothing needs a paid-only capability |

@@ -28,7 +28,7 @@ flowchart LR
         RX --> PD --> UP
     end
 
-    subgraph G["☁️ gv-data-platform"]
+    subgraph G["☁️ GCP"]
         direction TB
         CR["Cloud Run<br/>wristmemo-ingest"]
         DB[("Cloud SQL<br/>wristmemo.memos")]
@@ -142,22 +142,46 @@ flowchart TD
 three failure paths are *invisible*, because stage 1 is a one-way door with no
 upload UI.
 
-`IngestCredentials.current` is `nil` today, so the app is sitting in the second
-red box: uploads silently disabled, one log line at launch, no memo ever sent.
+On real hardware the app is still sitting in the second red box —
+`IngestCredentials.current` is `nil` until the scheme supplies it, so uploads
+are disabled with one log line and no memo is ever sent. `./cloud.sh` supplies
+credentials itself, which is why the simulator path is green while the device
+path has never run.
 
 ---
 
+## Testing leg ② without a watch
+
+`./cloud.sh --db` runs the whole upload leg against the real service:
+
+```
+✓ service reachable
+✓ simulator ready
+✓ planted memo 07ac054b-…
+✓ app reports uploaded
+✓ row in Cloud SQL: investment idea | increase the position in Broadcom…
+green
+```
+
+It plants a memo directly into the phone app's container exactly as
+`session(_:didReceive:)` would have left it, so **no watch, no pair and no
+WatchConnectivity are involved**. Credentials reach the app through
+`SIMCTL_CHILD_*`, which means no token is ever written into the Xcode scheme —
+that file is committed.
+
+**What it does not prove:** the simulator has no background transfer daemon, so
+`TranscriptionClient` falls back to a default `URLSession` there. The request,
+auth, retry policy and state machine are all exercised; that an upload *survives
+the app being suspended* can only be shown on hardware.
+
 ## What is left
 
-1. **Set the credentials.** `WRISTMEMO_INGEST_URL` and `WRISTMEMO_INGEST_TOKEN`
-   in the Xcode scheme's environment; `IngestCredentials` persists them to the
-   Keychain so later on-device launches work without Xcode.
-2. **Record a memo on the watch** and confirm the row lands. This is the first
-   real test of leg ② from hardware — background session, queue and retry have
-   only been exercised against a stub.
-3. **Show upload state in `LibraryView`.** The sidecar field already exists;
-   this is one badge, and it is what turns the diagram above from hopeful into
-   checkable.
+1. **Run it on hardware.** Set `WRISTMEMO_INGEST_URL` and
+   `WRISTMEMO_INGEST_TOKEN` in the Xcode scheme's environment for one launch;
+   `IngestCredentials` persists them to the Keychain so later on-device launches
+   work without Xcode. Then record a memo on the watch and confirm the row.
+   This is the only remaining untested thing: leg ① from real hardware, and the
+   background session doing what the simulator cannot.
 
 ---
 

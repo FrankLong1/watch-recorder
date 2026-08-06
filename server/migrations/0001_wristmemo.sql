@@ -6,7 +6,7 @@ CREATE SCHEMA IF NOT EXISTS wristmemo;
 REVOKE ALL ON SCHEMA wristmemo FROM PUBLIC;
 
 -- The ingest identity gets this role and nothing else. The instance is shared
--- with the agent inbox, so WristMemo must not reach anything outside its own
+-- with a neighbouring service, so WristMemo must not reach anything outside its own
 -- schema.
 DO $$
 BEGIN

@@ -1,4 +1,4 @@
-# Base images are pinned to the same digests the agent-inbox queue already runs,
+# Base images are pinned to the same digests the sibling queue service already runs,
 # so both services move together rather than drifting apart silently.
 FROM oven/bun:1.2.23@sha256:6ebf306367da43ad75c4d5119563e24de9b66372929ad4fa31546be053a16f74 AS build
 

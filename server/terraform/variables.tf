@@ -23,11 +23,17 @@ variable "region" {
 variable "sql_instance_name" {
   description = <<-EOT
     Name of the EXISTING Cloud SQL instance to attach to. This configuration
-    reads the instance through a data source and never manages it, so the
-    agent-inbox Terraform state remains the single owner.
+    reads the instance through a data source and never manages it, so that
+    instance's own Terraform state remains the single owner. There is
+    intentionally no default — this repo is public.
   EOT
   type        = string
-  default     = "demo-agent-inbox-postgres"
+  nullable    = false
+
+  validation {
+    condition     = length(trimspace(var.sql_instance_name)) > 0
+    error_message = "sql_instance_name must be set."
+  }
 }
 
 variable "name_prefix" {
@@ -37,7 +43,7 @@ variable "name_prefix" {
 }
 
 variable "database_name" {
-  description = "Dedicated PostgreSQL database, separate from the agent inbox's."
+  description = "Dedicated PostgreSQL database, separate from the neighbour's."
   type        = string
   default     = "wristmemo"
 }

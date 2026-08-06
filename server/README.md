@@ -15,9 +15,9 @@ transcript *after* it lands is stage 2, in
   instead, which is revocable and rate-limitable.
 - **One-way door.** The transcript does not go back to the phone. The response
   carries only the status that drives the phone's retry queue.
-- **It attaches to infrastructure that already exists** — the Cloud SQL instance
-  in `gv-data-platform` that `slop-apps/infra/agent-inbox` owns. This
-  configuration reads that instance through a data source and never manages it.
+- **It attaches to infrastructure that already exists** — a Cloud SQL instance
+  owned by a separate, private project. This configuration reads that instance
+  through a data source and never manages it.
 
 ## Layout
 
@@ -97,8 +97,15 @@ the same binary runs locally and in Cloud Run.
 
 ## Deploying
 
-Ordered, because each step depends on the last. Nothing here has been run
-against the live project yet.
+Ordered, because each step depends on the last. The commands below read three
+values from the environment — they are deliberately not hardcoded, since this
+repo is public:
+
+```bash
+export PROJECT_ID=…      # the GCP project that owns the shared instance
+export REGION=us-central1
+export SQL_INSTANCE=…    # the existing Cloud SQL instance to attach to
+```
 
 **1. Provision everything except the service.** `image` is empty on the first
 apply, so the database, identity, secrets and image repository are created
@@ -121,34 +128,34 @@ enter state, a plan, or a log.
 
 ```bash
 printf %s "$OPENAI_KEY" | gcloud secrets versions add wristmemo-openai-api-key \
-  --project=gv-data-platform --data-file=-
+  --project="$PROJECT_ID" --data-file=-
 
 # Generate the ingest token; the same value goes into the phone.
 openssl rand -base64 32 | tr -d '\n' | tee /dev/tty | \
   gcloud secrets versions add wristmemo-ingest-token \
-  --project=gv-data-platform --data-file=-
+  --project="$PROJECT_ID" --data-file=-
 ```
 
-**3. Migrate.** Uses the same checksum-ledger runner as the agent inbox, through
-a Cloud SQL Auth Proxy authenticated as an operator who can impersonate a
-migrator identity.
+**3. Migrate.** Uses the same checksum-ledger runner as the neighbouring
+service, through a Cloud SQL Auth Proxy authenticated as an operator who can
+impersonate a migrator identity.
 
 The migration runs as a dedicated keyless `wristmemo-migrator` identity, which
-owns the schema. The running service never has those rights, and the agent
-inbox's migrator is untouched. Start a proxy that impersonates it:
+owns the schema. The running service never has those rights, and the
+neighbour's migrator is untouched. Start a proxy that impersonates it:
 
 ```bash
 cloud-sql-proxy --auto-iam-authn --port 55431 \
-  --impersonate-service-account wristmemo-migrator@gv-data-platform.iam.gserviceaccount.com \
-  gv-data-platform:us-central1:demo-agent-inbox-postgres
+  --impersonate-service-account wristmemo-migrator@"$PROJECT_ID".iam.gserviceaccount.com \
+  "$PROJECT_ID:$REGION:$SQL_INSTANCE"
 ```
 
 Then, in another shell:
 
 ```bash
 cd ~/Projects/watch-recorder/server
-DATABASE_URL='host=127.0.0.1 port=55431 dbname=wristmemo user=wristmemo-migrator@gv-data-platform.iam sslmode=disable' \
-INGEST_DATABASE_USER='wristmemo-ingest@gv-data-platform.iam' \
+DATABASE_URL="host=127.0.0.1 port=55431 dbname=wristmemo user=wristmemo-migrator@$PROJECT_ID.iam sslmode=disable" \
+INGEST_DATABASE_USER="wristmemo-ingest@$PROJECT_ID.iam" \
   ./scripts/migrate.sh
 ```
 
@@ -158,7 +165,7 @@ migration that changed after it was applied fails before any SQL runs.
 **4. Build, push, deploy.**
 
 ```bash
-gcloud builds submit --project=gv-data-platform --config=cloudbuild.yaml \
+gcloud builds submit --project="$PROJECT_ID" --config=cloudbuild.yaml \
   --substitutions=_IMAGE="$(terraform -chdir=terraform output -raw image_repository)/wristmemo-ingest:$(git rev-parse --short=12 HEAD)" .
 ```
 
@@ -179,8 +186,10 @@ launch rather than checking it in.
 
 ## Status — deployed
 
-Live at `https://wristmemo-ingest-qbkz5pi2ua-uc.a.run.app`, in
-`gv-data-platform`, `us-central1`.
+Live in `us-central1`. `terraform output service_url` prints
+the endpoint; it is deliberately not written down here. The service accepts
+unauthenticated requests at the platform layer — the bearer token is the whole
+gate — so the URL is the one thing worth not publishing in a public repo.
 
 Verified locally against Postgres 16 in Docker with a stub OpenAI:
 
@@ -194,7 +203,7 @@ Verified locally against Postgres 16 in Docker with a stub OpenAI:
 Verified against **live GCP**:
 
 - `terraform apply` added 18 resources, **0 changed, 0 destroyed** — the shared
-  agent-inbox instance was not touched
+  instance was not touched
 - the migration ran on the real instance as `wristmemo-migrator`
 - `/readyz` returns 200 from Cloud Run, which exercises the whole database path:
   the `/cloudsql` Unix socket, the metadata-server token fetch, and IAM database
@@ -215,8 +224,8 @@ A second identical POST also returned `204` and produced **no** second row and
 no second OpenAI call. `websearch_to_tsquery('english','NVDA')` finds it.
 
 Isolation was checked directly against the shared instance: the ingest identity
-has `USAGE` on its own schema and is refused on `agent_inbox` — *permission
-denied for schema agent_inbox*. All neighbouring Cloud Run services stayed
+has `USAGE` on its own schema and is refused on the neighbouring one —
+*permission denied for schema …*. All neighbouring Cloud Run services stayed
 healthy through the rollout.
 
 ### On the model id

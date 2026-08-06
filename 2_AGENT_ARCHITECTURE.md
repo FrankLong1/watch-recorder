@@ -13,11 +13,11 @@ where this begins.
 
 ```mermaid
 flowchart LR
-    subgraph CLOUD["☁️ Cloud SQL — gv-data-platform"]
+    subgraph CLOUD["☁️ Cloud SQL"]
         DB[("🐘 wristmemo.memos<br/>transcript is here")]
     end
 
-    subgraph DEVSERVER["🖥️ Dev server — frank-ai-workstation"]
+    subgraph DEVSERVER["🖥️ Dev server"]
         direction TB
         POLL["⏱️ polling script<br/>anything new?"]
         WAKE["⚡ WakeAgent"]

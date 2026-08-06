@@ -2,7 +2,7 @@
 # Applies migrations in order and records filename plus SHA-256 in a ledger, so
 # a migration that changed after it was applied fails before any SQL runs.
 #
-# Modelled on slop-apps/infra/agent-inbox/scripts/migrate.sh, which is the
+# Modelled on the migrate.sh in a sibling private project, which is the
 # established runner for this Cloud SQL instance.
 set -euo pipefail
 
