@@ -10,6 +10,7 @@
 		A06D7DAD745C123643EA2AF8 /* WristMemoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2485CEB2051BDEF12B42AF21 /* WristMemoApp.swift */; };
 		3D2079B042B68CAAF76E7776 /* PhoneLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FE33FF418EC40F4790A1578 /* PhoneLibrary.swift */; };
 		C599E4D892EA74E5FAB80AB5 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FF4F345E89E8DB8E583DC96 /* LibraryView.swift */; };
+		B7C41D9E025A63F814E7A390 /* TranscriptionClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E9A7C10B3D5628F9017CA42 /* TranscriptionClient.swift */; };
 		D0694CC41CABB3130B7B85BA /* SharedConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A0075E4CFD286E9FE8E7D55 /* SharedConfig.swift */; };
 		00A403245E70C13BE6B24EB8 /* Formatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11AEF845835EE62EA196738 /* Formatting.swift */; };
 		2E8E95D0F1B313CEDEC8A8C3 /* AudioDuration.swift in Sources */ = {isa = PBXBuildFile; fileRef = C264870A06619121DFC7D192 /* AudioDuration.swift */; };
@@ -119,6 +120,7 @@
 		2485CEB2051BDEF12B42AF21 /* WristMemoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WristMemoApp.swift"; sourceTree = "<group>"; };
 		6FE33FF418EC40F4790A1578 /* PhoneLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PhoneLibrary.swift"; sourceTree = "<group>"; };
 		7FF4F345E89E8DB8E583DC96 /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LibraryView.swift"; sourceTree = "<group>"; };
+		4E9A7C10B3D5628F9017CA42 /* TranscriptionClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TranscriptionClient.swift"; sourceTree = "<group>"; };
 		3C356518F3C752185B32433B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Assets.xcassets"; sourceTree = "<group>"; };
 		21C71F4B374B671FF62278CB /* WatchApp-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "WatchApp-Info.plist"; sourceTree = "<group>"; };
 		5040D7F4DAC8100693F8784A /* WatchControls-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "WatchControls-Info.plist"; sourceTree = "<group>"; };
@@ -231,6 +233,7 @@
 				2485CEB2051BDEF12B42AF21 /* WristMemoApp.swift */,
 				6FE33FF418EC40F4790A1578 /* PhoneLibrary.swift */,
 				7FF4F345E89E8DB8E583DC96 /* LibraryView.swift */,
+				4E9A7C10B3D5628F9017CA42 /* TranscriptionClient.swift */,
 				3C356518F3C752185B32433B /* Assets.xcassets */,
 			);
 			path = iOSApp;
@@ -401,6 +404,7 @@
 				A06D7DAD745C123643EA2AF8 /* WristMemoApp.swift in Sources */,
 				3D2079B042B68CAAF76E7776 /* PhoneLibrary.swift in Sources */,
 				C599E4D892EA74E5FAB80AB5 /* LibraryView.swift in Sources */,
+				B7C41D9E025A63F814E7A390 /* TranscriptionClient.swift in Sources */,
 				D0694CC41CABB3130B7B85BA /* SharedConfig.swift in Sources */,
 				00A403245E70C13BE6B24EB8 /* Formatting.swift in Sources */,
 				2E8E95D0F1B313CEDEC8A8C3 /* AudioDuration.swift in Sources */,

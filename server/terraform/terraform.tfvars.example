@@ -1,0 +1,14 @@
+project_id = "gv-data-platform"
+region     = "us-central1"
+
+# The existing agent-inbox instance. This configuration attaches to it and never
+# manages it.
+sql_instance_name = "demo-agent-inbox-postgres"
+
+# Left empty on the first apply so the database, identity, secrets and image
+# repository are created before there is anything to deploy. Fill in the digest
+# emitted by `gcloud builds submit` and apply again.
+image = ""
+
+openai_model = "gpt-transcribe"
+user_id      = "frank"

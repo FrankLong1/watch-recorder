@@ -1,0 +1,11 @@
+# Build from server/ — this service deliberately shares no source with the rest
+# of the repository, so it needs no wider context.
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-f", "Dockerfile", "-t", "${_IMAGE}", "."]
+
+images:
+  - "${_IMAGE}"
+
+options:
+  logging: CLOUD_LOGGING_ONLY

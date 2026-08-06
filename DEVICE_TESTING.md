@@ -13,37 +13,163 @@
 | Bundle IDs | `com.franklong.wristmemo{,.watchkitapp,.watchkitapp.controls}` |
 | App Groups | Not used — the launch hand-off is in-process, so nothing needs a paid-only capability |
 
-Apple-account connectivity is confirmed working: a signed device build reached
-Apple's portal and returned *"Your team has no devices from which to generate a
-provisioning profile."* That is the expected answer when no hardware has been
-registered yet, and it resolves itself the first time you plug the phone in.
+## Account tier, and why it decides everything
+
+Signing works on a **free** personal team — that is not the constraint. What the
+tier decides is *device registration*, which is what actually gates installs.
+
+| | Free personal team | Paid program |
+|---|---|---|
+| Profile lifetime | **7 days**, then the app stops launching | 1 year |
+| Registering a device | Xcode only, automatically, and **only when it can talk to the device** | paste the UDID into the portal by hand |
+| App Groups | cannot provision | available |
+
+Verify the tier in one command — the expiry date is the tell:
+
+```bash
+cd ~/Library/Developer/Xcode/UserData/Provisioning\ Profiles/
+for p in *.mobileprovision; do
+  security cms -D -i "$p" > /tmp/p.plist 2>/dev/null
+  /usr/libexec/PlistBuddy -c "Print :ExpirationDate" -c "Print :Name" /tmp/p.plist
+done
+```
+
+7 days out means free; a year means paid. Xcode → Settings → Apple Accounts
+agrees: *Personal Team* vs *Individual*. To force a fresh answer from Apple,
+move the `.mobileprovision` files aside and rebuild with
+`-allowProvisioningUpdates` — that re-queries the portal live. Xcode 26 has no
+refresh button in the accounts pane; signing out and back in is the only manual
+equivalent, and it is rarely what you need.
+
+**Status 2026-08-06:** paid membership has been ordered; Apple warns activation
+can take up to 48 hours. Until it activates the team is still free and profiles
+still expire in 7 days.
 
 ## What you have to do
 
 Only the steps that need physical hardware or your Apple ID password.
 
-### 1. Developer Mode on both devices
+### 1. Connect the iPhone first
+
+Plug the iPhone into the Mac with USB and tap **Trust**.
+
+Do this **before** looking for Developer Mode. The toggle does not exist in
+Settings until the device has been seen by Xcode — going hunting for it first
+just wastes time.
+
+### 2. Developer Mode on both devices
 
 - **iPhone** → Settings › Privacy & Security › Developer Mode → **On** → restart
+  → unlock → confirm **Turn On**
 - **Apple Watch** → Settings › Privacy & Security › Developer Mode → **On** → restart
 
 Both are required; the watch will not accept an install without it.
 
-### 2. Connect
+Confirm from the Mac rather than trusting the UI:
 
-Plug the iPhone into the Mac with USB and tap **Trust**. The watch is reached
-*through* the phone the first time — you do not connect it directly.
+```bash
+xcrun devicectl list devices
+xcrun devicectl device info details --device <identifier> | grep -i developerMode
+```
 
-In Xcode: **Window › Devices and Simulators**. The iPhone appears, and the
-paired watch appears nested underneath it. Wait until it stops saying
-"Preparing debugger support" — first time this takes a few minutes.
+### 3. Get the watch actually connected — the hard part
 
-### 3. Check the watch is on watchOS 26.x
+**An Apple Watch has no data port.** The magnetic charger is power-only, so
+every byte between Xcode and the watch travels over Wi-Fi. There is no cable
+fallback, which makes this the most fragile step by a wide margin.
 
-Watch app on iPhone → General › About. The project targets watchOS 26.0, so
-anything 26.x works. On 11.x or earlier it will not install.
+The watch must be **unlocked, on its charger, and on the same Wi-Fi network as
+the Mac**. Then check that Xcode ever actually prepared it:
 
-### 4. Run it
+```bash
+ls ~/Library/Developer/Xcode/watchOS\ DeviceSupport/
+```
+
+An entry there is proof of a successful connection. **No such directory means
+the watch has never connected**, no matter what Xcode's setup dialog claims —
+its green "This device is set up" ticks reflect pairing, not preparation.
+
+The failure looks like this:
+
+```
+Timed out while attempting to establish tunnel using negotiated network parameters.
+        (com.apple.dt.RemotePairingError error 1001)
+```
+
+and it cascades into misleading downstream errors. Most confusing is this one,
+where the watchOS version is **blank** because Xcode never read it:
+
+```
+error: Frank's Apple Watch's watchOS  doesn't match WristMemo Watch App.app's
+       watchOS 26.0 deployment target.
+```
+
+That is not a deployment-target problem. Do not lower `WATCHOS_DEPLOYMENT_TARGET`
+in response — Controls only exist on watchOS 26, so lowering it deletes the
+feature. It means the tunnel is down.
+
+Causes seen on this Mac, in order of likelihood:
+
+- **A multi-homed Mac.** `route -n get default` must resolve to the Wi-Fi
+  interface the watch is on. A USB Ethernet dongle on a different subnet
+  (here `en8` → `10.0.46.1`, while Wi-Fi `en0` was on `192.168.76.x`) captures
+  the default route and the tunnel negotiates against the wrong network.
+  Unplug it.
+- **AP client isolation.** Common on guest, office, and apartment networks — a
+  `/23` or larger subnet is a hint you are on managed infrastructure. It blocks
+  device-to-device traffic outright and cannot be worked around from the Mac.
+- **A VPN acting as an exit node**, which also captures the default route.
+  Plain Tailscale routing only `100.64.0.0/10` is harmless; check
+  `tailscale status --json` for `BackendState` before blaming it. Stale `utun`
+  routes from a stopped VPN are cosmetic.
+
+### 4. Check the watch is on watchOS 26.x
+
+Watch → Settings › General › About › Version. The project targets watchOS 26.0,
+so anything 26.x works. On 11.x or earlier it will not install.
+
+Note that Xcode cannot tell you this until step 3 succeeds — the blank version
+in the error above is exactly that gap.
+
+### 5. Confirm both devices are in the profiles
+
+This is the step whose absence is hardest to diagnose, because the error surfaces
+on the *iPhone* as a vague **"the app could not be installed at this time."**
+
+That message does not mean the transfer failed. Delivery is device-to-device and
+works fine — the watch app ships inside the iPhone app at
+`WristMemo.app/Watch/WristMemo Watch App.app`, and the phone hands it over. What
+fails is the **signature check**: the embedded profile lists which devices may
+run the app, and if the watch's UDID is missing, the watch refuses it.
+
+```bash
+cd ~/Library/Developer/Xcode/UserData/Provisioning\ Profiles/
+for p in *.mobileprovision; do
+  security cms -D -i "$p" > /tmp/p.plist 2>/dev/null
+  /usr/libexec/PlistBuddy -c "Print :Name" -c "Print :ProvisionedDevices" /tmp/p.plist
+done
+```
+
+The iOS host profile must include the iPhone, while the watch app and controls
+profiles must include the paired watch. Keep those identifiers out of the
+repository; obtain them locally from `xcrun devicectl list devices`.
+
+| Device | UDID |
+|---|---|
+| iPhone | `<iPhone hardware UDID>` |
+| Apple Watch | `<Watch hardware UDID>` |
+
+If the watch is missing:
+
+- **Paid** — add it at [Devices](https://developer.apple.com/account/resources/devices/list)
+  → **+** → platform **watchOS** → paste the UDID. This is the escape hatch: it
+  needs no Mac-to-watch connection at all, so it sidesteps step 3 entirely.
+- **Free** — there is no portal device management. Xcode must register it
+  automatically, which means step 3 has to succeed first. No way around it.
+
+Then move the profiles aside and rebuild so they regenerate with both devices.
+
+### 6. Run it
 
 ```
 open /Users/frank/Projects/watch-recorder/WristMemo.xcodeproj
@@ -51,14 +177,30 @@ open /Users/frank/Projects/watch-recorder/WristMemo.xcodeproj
 
 1. Scheme **WristMemo** → destination *your iPhone* → **Run**.
    This installs the companion and pushes the watch app across.
-   Xcode will register both devices and generate provisioning profiles — you may
-   be asked for your Apple ID password once.
 2. Scheme **WristMemo Watch App** → destination *your Apple Watch* → **Run**
-   for subsequent watch-only iterations (much faster).
+   for subsequent watch-only iterations (much faster). Needs step 3 working.
+
+Or from the command line, which is faster to iterate and gives better errors:
+
+```bash
+xcodebuild -project WristMemo.xcodeproj -scheme "WristMemo" \
+  -destination "id=<iPhone hardware UDID>" \
+  -derivedDataPath /tmp/wm -allowProvisioningUpdates build
+
+xcrun devicectl device install app --device <iPhone device identifier> \
+  /tmp/wm/Build/Products/Debug-iphoneos/WristMemo.app
+```
+
+`xcrun devicectl list devices` shows both values. `xcodebuild` needs the
+hardware UDID; `devicectl` needs the device identifier shown in its first
+column.
+
+If the watch app does not appear on the watch by itself, push it from the phone:
+**Watch app → Available Apps → WristMemo → Install**.
 
 On the watch, the first launch shows the microphone prompt. Allow it.
 
-### 5. Assign the Action button
+### 7. Assign the Action button
 
 Watch → **Settings › Action Button** → **Action** → **Control** → tap the
 preview → **WristMemo › Record Voice Memo**.
@@ -126,9 +268,19 @@ xcrun simctl spawn $SIM log stream --predicate 'subsystem == "com.franklong.wris
 
 ## Gotchas
 
-- **7-day expiry.** If Team 44X645LJ6H is a free personal team, the app stops
-  launching after 7 days and needs a re-run from Xcode. A paid membership
-  raises this to a year.
+- **7-day expiry — confirmed, not hypothetical.** Team 44X645LJ6H is a free
+  personal team. Profiles minted 2026-08-06 expire 2026-08-13, exactly 7 days.
+  The app stops launching then and needs a re-run from Xcode. Paid raises this
+  to a year; see the tier table above.
+- **The Action button is Ultra-only.** On a Series 9 or any non-Ultra watch,
+  Settings › Action Button does not exist. This does not block testing the
+  design: `StartRecordingControl`, `RecordComplication`, and `WristMemoShortcuts`
+  all fire the *same* `StartRecordingIntent` with
+  `supportedModes = .foreground(.immediate)`. Adding the **Record Memo**
+  complication to the watch face and tapping it exercises the identical code
+  path, so the one assumption the design rests on — that the intent foregrounds
+  the app and starts recording — is answerable on any watchOS 26 watch. Only
+  press-to-first-sample feel and the button assignment itself need an Ultra.
 - **Launch the app once** before the control shows up in the Action button list.
 - **Sync needs the companion installed** on the iPhone; `transferFile` has
   nowhere to deliver otherwise.

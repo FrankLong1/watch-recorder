@@ -95,7 +95,7 @@ final class MemoStore {
 
         // A temporary output is never the committed memo. Its source capture is
         // still present, so it is safe to clear and retry on the next recovery.
-        for temporary in urls where temporary.pathExtension == "partial" {
+        for temporary in urls where temporary.lastPathComponent.hasSuffix(".partial.m4a") {
             try? fileManager.removeItem(at: temporary)
         }
 
@@ -177,7 +177,10 @@ final class MemoStore {
         }
 
         let destination = memosDirectory.appendingPathComponent("\(id.uuidString).m4a")
-        let temporary = memosDirectory.appendingPathComponent("\(id.uuidString).m4a.partial")
+        // Keep the real extension at the end. AVAudioFile infers its container
+        // type from that extension, so a name ending in `.partial` cannot be
+        // written as an M4A even though it eventually gets renamed to one.
+        let temporary = memosDirectory.appendingPathComponent("\(id.uuidString).partial.m4a")
         try? fileManager.removeItem(at: temporary)
         let compressedDuration: TimeInterval? = await Task.detached(priority: .userInitiated) {
             try? AudioCompressor.compress(source: captureURL, to: temporary)
