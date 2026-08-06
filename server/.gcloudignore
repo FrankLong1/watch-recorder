@@ -1,0 +1,16 @@
+# Cloud Build uploads this directory as the build context. Without this file
+# gcloud falls back to .gitignore semantics and ships node_modules and the
+# Terraform provider cache — 145 MB for a service whose image needs about 30 KB
+# of source.
+#
+# The Dockerfile only ever COPYs package.json, bun.lock, tsconfig.json and src/.
+.gcloudignore
+.git/
+node_modules/
+dist/
+terraform/
+scripts/
+migrations/
+*.md
+.env
+.env.*

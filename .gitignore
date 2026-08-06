@@ -1,3 +1,9 @@
+# Secrets. Never commit these — the OpenAI key and the ingest token are the two
+# things in this project that cannot be rotated silently.
+.env
+.env.*
+!.env.example
+
 # Xcode
 build/
 DerivedData/
