@@ -11,6 +11,7 @@ import { loadConfig } from "./config";
 import { createMemoStore, DatabaseUnavailableError, MemoInProgressError } from "./db";
 import { parseRoute } from "./routing";
 import { transcribe, TranscriptionError } from "./transcribe";
+import { isSupportedMemoUpload } from "./upload-format";
 
 const config = loadConfig();
 const store = createMemoStore(config.database);
@@ -67,6 +68,10 @@ app.post("/v1/memos/:id", async (c) => {
   }
   if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
     return c.json({ error: "x-duration must be seconds" }, 400);
+  }
+
+  if (!isSupportedMemoUpload(c.req.header("content-type"), c.req.header("x-audio-format"))) {
+    return c.json({ error: "only m4a audio is accepted" }, 415);
   }
 
   // The multipart envelope sent upstream needs a length, and a background

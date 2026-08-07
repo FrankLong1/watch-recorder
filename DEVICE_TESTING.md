@@ -236,23 +236,32 @@ Verified by actually running on the Apple Watch Ultra 3 simulator:
   producing a 5.27 s AAC memo, index written, capture directory cleaned
 
 - App launches and renders on a 49mm Ultra screen
-- First-run microphone permission screen
 - **Launch-straight-into-recording** — the same `startRequested` path the Action
   button drives, triggered by a DEBUG launch flag (below)
-- Live timer, level meter, and the Cancel / Stop controls
+- The full-screen button: grey READY → tap → red RECORDING → tap → grey again,
+  with no confirmation in between, and a second recording startable at once
 - **Crash recovery**: hard-killed mid-recording, the 2 MB PCM capture survived,
   and the next launch turned it into a valid 216 KB AAC file — `afinfo` reports
   1 ch, 22050 Hz, 45.5 s, 32 kbit/s. Compression ratio 9.3×.
-- Index persistence and the "1 recovered memo" list state
+- Index persistence across launches
 
 Still needs the real Ultra 2, because a simulator cannot answer these:
 
 - [ ] The control actually appears in Settings › Action Button
 - [ ] A press foregrounds the app — **the one assumption the design rests on**
+- [ ] **A second Action press stops the recording.** The button is now a toggle,
+      which assumes the intent still fires and reaches an app that is already
+      frontmost and recording. Only hardware can show that; if it turns out the
+      press is swallowed, the screen tap and silence auto-stop still end it.
 - [ ] How instant the press-to-first-sample delay feels
 - [ ] Recording continues on wrist-down (`WKBackgroundModes: audio`)
 - [ ] A phone call pauses and resumes cleanly
-- [ ] Haptics feel right at start/stop
+- [ ] **The two start haptics are distinguishable** — the light one on press and
+      the "speak" one when the microphone opens. If they blur into each other on
+      the wrist, the second is the one that matters.
+- [ ] Red is bearable at night, and the grey reads as off rather than as an
+      unlit screen, in sunlight and in always-on
+- [ ] Double Tap toggles the full-screen button in both directions
 - [ ] `WCSession.transferFile` delivers to the iPhone
 
 ## Simulator iteration

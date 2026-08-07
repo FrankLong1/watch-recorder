@@ -14,9 +14,11 @@ final class WatchSyncClient: NSObject {
     private weak var store: MemoStore?
     private var session: WCSession? { WCSession.isSupported() ? WCSession.default : nil }
     private var retryTask: Task<Void, Never>?
+    private var receiptRetryTask: Task<Void, Never>?
     private var retryDelay: TimeInterval = 30
 
     private static let maximumRetryDelay: TimeInterval = 30 * 60
+    private static let receiptRetryDelay: TimeInterval = 5 * 60
 
     func activate(store: MemoStore) {
         self.store = store
@@ -26,26 +28,58 @@ final class WatchSyncClient: NSObject {
     }
 
     func send(_ memo: Memo) {
+        guard memo.syncState != .synced else { return }
         guard let store, let session, session.activationState == .activated else { return }
         let url = store.url(for: memo)
         guard FileManager.default.fileExists(atPath: url.path) else { return }
 
         store.setSyncState(.transferring, for: memo.id)
-        // The phone reads these instead of re-deriving them from the audio.
-        session.transferFile(url, metadata: [
-            "id": memo.id.uuidString,
-            "createdAt": memo.createdAt.timeIntervalSince1970,
-            "duration": memo.duration
-        ])
+        session.transferFile(
+            url,
+            metadata: MemoDelivery.metadata(
+                id: memo.id,
+                recordedAt: memo.createdAt,
+                duration: memo.duration
+            )
+        )
         log.info("Queued \(memo.filename, privacy: .public)")
     }
 
     /// Re-queues anything that never made it, when the session activates or the
     /// phone comes back within range.
     func sendPending() {
-        guard let store, session?.outstandingFileTransfers.isEmpty ?? false else { return }
-        for memo in store.memos where memo.syncState != .synced {
+        guard let store, let session, session.activationState == .activated else { return }
+
+        // A wedged transfer must not hold every later thought hostage. If the
+        // system still owns a transfer for an ID, leave it alone; otherwise a
+        // pending or interrupted transfer is safe to queue again because the
+        // phone commits by UUID and acknowledges idempotently.
+        let outstandingIDs = Set(session.outstandingFileTransfers.compactMap {
+            MemoDelivery.id(in: $0.file.metadata)
+        })
+        for memo in store.memos where memo.syncState != .synced && !outstandingIDs.contains(memo.id) {
             send(memo)
+        }
+    }
+
+    private func receivePhoneReceipt(for id: UUID) {
+        guard let store, store.memos.contains(where: { $0.id == id }) else { return }
+        store.setSyncState(.synced, for: id)
+        retryDelay = 30
+        log.info("Phone committed \(id.uuidString, privacy: .public)")
+    }
+
+    /// A successful file-transfer callback only proves the system accepted the
+    /// transfer, not that a phone receipt will arrive. Requeue any unreceipted
+    /// source after a quiet interval; duplicate delivery is harmless because the
+    /// phone commits and acknowledges by the immutable watch UUID.
+    private func scheduleReceiptRetry() {
+        guard receiptRetryTask == nil else { return }
+        receiptRetryTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Self.receiptRetryDelay))
+            guard !Task.isCancelled else { return }
+            self?.receiptRetryTask = nil
+            self?.sendPending()
         }
     }
 
@@ -82,20 +116,26 @@ extension WatchSyncClient: WCSessionDelegate {
     }
 
     nonisolated func session(_ session: WCSession, didFinish fileTransfer: WCSessionFileTransfer, error: Error?) {
-        let idString = fileTransfer.file.metadata?["id"] as? String
-        let failed = error != nil
+        let id = MemoDelivery.id(in: fileTransfer.file.metadata)
         Task { @MainActor [weak self] in
-            guard let self, let idString, let id = UUID(uuidString: idString) else { return }
-            self.store?.setSyncState(failed ? .pending : .synced, for: id)
-            if failed {
-                self.log.error("Transfer failed: \(error?.localizedDescription ?? "?", privacy: .public)")
+            guard let self, let id else { return }
+            if let error {
+                self.store?.setSyncState(.pending, for: id)
+                self.log.error("Transfer failed: \(error.localizedDescription, privacy: .public)")
                 self.scheduleRetry()
             } else {
                 self.retryDelay = 30
-                // This may be the last outstanding transfer that was keeping
-                // an earlier failed memo from being re-queued.
-                self.sendPending()
+                // Delivery to WatchConnectivity's inbox is not proof that the
+                // phone committed the file. Retain this source until the phone
+                // sends its UUID-only receipt.
+                self.log.info("Transfer finished; awaiting phone receipt for \(id.uuidString, privacy: .public)")
+                self.scheduleReceiptRetry()
             }
         }
+    }
+
+    nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
+        guard let id = MemoDelivery.phoneReceiptID(in: userInfo) else { return }
+        Task { @MainActor [weak self] in self?.receivePhoneReceipt(for: id) }
     }
 }

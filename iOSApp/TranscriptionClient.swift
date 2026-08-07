@@ -57,10 +57,6 @@ final class TranscriptionClient: NSObject {
     func activate(library: PhoneLibrary, onBackgroundEventsFinished: @escaping () -> Void) {
         self.library = library
         backgroundEventsFinished = onBackgroundEventsFinished
-        guard IngestCredentials.current != nil else {
-            log.info("Ingest not configured; uploads are disabled")
-            return
-        }
         // Touch the session so it reclaims any transfer that completed while the
         // app was not running.
         _ = session
@@ -73,11 +69,21 @@ final class TranscriptionClient: NSObject {
                 object: nil
             )
         }
+        guard IngestCredentials.current != nil else {
+            log.info("Ingest not configured; uploads are disabled")
+            return
+        }
         recoverBackgroundTasks()
     }
 
     @objc private nonisolated func applicationDidBecomeActive() {
-        Task { @MainActor [weak self] in self?.uploadPending() }
+        Task { @MainActor [weak self] in
+            // Sweeping before uploading keeps the two in a sane order: nothing
+            // is queued for a memo that is about to be deleted anyway.
+            self?.library?.purgeUploaded()
+            guard IngestCredentials.current != nil else { return }
+            self?.recoverBackgroundTasks()
+        }
     }
 
     /// Re-queues anything that never landed. Safe to call repeatedly: the server
@@ -108,6 +114,9 @@ final class TranscriptionClient: NSObject {
 
     private func upload(_ item: PhoneLibrary.Item) {
         guard let library, let credentials = IngestCredentials.current else { return }
+        // OpenAI accepts M4A, not the raw CAF capture format. The phone
+        // normalises CAFs before they reach this client; never lie about one.
+        guard item.isReadyForIngest else { return }
         guard FileManager.default.fileExists(atPath: item.url.path) else { return }
 
         guard let endpoint = URL(string: "v1/memos/\(item.id.uuidString.lowercased())", relativeTo: credentials.baseURL) else {
@@ -119,6 +128,7 @@ final class TranscriptionClient: NSObject {
         request.httpMethod = "POST"
         request.setValue("Bearer \(credentials.token)", forHTTPHeaderField: "Authorization")
         request.setValue("audio/mp4", forHTTPHeaderField: "Content-Type")
+        request.setValue("m4a", forHTTPHeaderField: "X-Audio-Format")
         // The server stores these rather than re-deriving them from the audio,
         // exactly as the phone does with the watch's transfer metadata.
         request.setValue(String(item.recordedAt.timeIntervalSince1970), forHTTPHeaderField: "X-Recorded-At")
@@ -162,13 +172,23 @@ final class TranscriptionClient: NSObject {
             return
         }
 
-        switch status {
-        // 204 today. Any 2xx is treated as committed so a later contract change
-        // cannot silently turn success into an infinite retry.
-        case .some(let code) where (200..<300).contains(code):
+        if MemoDelivery.isIngestReceipt(status: status) {
             retryDelay = 30
             library.setUploadState(.uploaded, for: id)
             log.info("Transcribed \(id.uuidString, privacy: .public)")
+            // This memo has a day left, but an upload finishing may be the only
+            // thing that wakes the app all day, so sweep the older ones now.
+            library.purgeUploaded()
+            return
+        }
+
+        switch status {
+        case .some(let code) where (200..<300).contains(code):
+            // A success-shaped response that is not the receipt is unsafe. The
+            // usual example is a captive portal serving HTML with a 200.
+            library.setUploadState(.pending, for: id)
+            log.error("Upload returned unexpected success \(code, privacy: .public); will retry")
+            scheduleRetry()
         case .some(let code) where (400..<500).contains(code):
             // The request itself is wrong — a bad token, an oversized memo, a
             // malformed header. Retrying sends exactly the same bytes.

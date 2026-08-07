@@ -155,6 +155,11 @@ final class MemoStore {
     func setSyncState(_ state: Memo.SyncState, for id: UUID) {
         guard let index = memos.firstIndex(where: { $0.id == id }) else { return }
         memos[index].syncState = state
+        // Stamped once, on the first delivery, so re-sending a memo the phone
+        // already has cannot push its deletion out by another day.
+        if state == .synced, memos[index].syncedAt == nil {
+            memos[index].syncedAt = Date()
+        }
         persistIndex()
     }
 
@@ -162,6 +167,49 @@ final class MemoStore {
         try? fileManager.removeItem(at: url(for: memo))
         memos.removeAll { $0.id == memo.id }
         persistIndex()
+    }
+
+    // MARK: - Retention
+
+    /// Deletes memos the phone has held for a day.
+    ///
+    /// Only `.synced` memos are eligible, so nothing is ever removed from the
+    /// wrist unless the phone is known to have it. A watch that never meets its
+    /// phone again keeps every memo forever, which is the intended behaviour —
+    /// storage pressure is recoverable, a lost thought is not.
+    ///
+    /// Idempotent and cheap, so it runs on launch, on returning to the
+    /// foreground, and on a background refresh rather than on a timer watchOS
+    /// would not reliably fire.
+    @discardableResult
+    func purgeDeliveredMemos(now: Date = Date()) -> Int {
+        loadIfNeeded()
+
+        // A memo delivered by a build that predates `syncedAt` has no stamp and
+        // would never expire. Treat the first sweep that sees it as the
+        // hand-off, so it gets one full window rather than immortality.
+        var stamped = false
+        for index in memos.indices where memos[index].syncState == .synced && memos[index].syncedAt == nil {
+            memos[index].syncedAt = now
+            stamped = true
+        }
+
+        let expired = memos.filter {
+            $0.syncState == .synced && Retention.hasExpired(handedOnAt: $0.syncedAt, now: now)
+        }
+        guard !expired.isEmpty else {
+            if stamped { persistIndex() }
+            return 0
+        }
+
+        for memo in expired {
+            try? fileManager.removeItem(at: url(for: memo))
+        }
+        let expiredIDs = Set(expired.map(\.id))
+        memos.removeAll { expiredIDs.contains($0.id) }
+        persistIndex()
+        log.notice("Purged \(expired.count) memo(s) the phone has had for a day")
+        return expired.count
     }
 
     // MARK: - Finishing a recording

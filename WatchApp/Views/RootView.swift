@@ -1,33 +1,18 @@
 import SwiftUI
 
-/// Routes on recording phase first, then on permission.
+/// There is one screen, so this is only a place to hang `bootstrap`.
 ///
-/// There is no `NavigationStack` push into the recording screen on purpose: a
-/// push animates, and when the app is launched by the Action button the
-/// recording UI needs to be the first thing drawn.
+/// It used to route on phase and permission. Both branches are gone: the
+/// recording state is a colour rather than a different view, and an
+/// undetermined microphone is handled by the first press, which is where a
+/// permission prompt belongs anyway. A denied microphone is the one thing the
+/// screen has to say in words, and `RecordScreen` says it.
 struct RootView: View {
 
     @Environment(RecorderModel.self) private var model
 
     var body: some View {
-        Group {
-            switch model.phase {
-            case .starting, .recording, .paused:
-                RecordingView()
-            case .saving:
-                SavingView()
-            case .saved(let memo):
-                SavedView(memo: memo)
-            case .failed(let message):
-                FailureView(message: message)
-            case .idle:
-                switch model.permission {
-                case .undetermined: PermissionView(state: .ask)
-                case .denied: PermissionView(state: .denied)
-                case .granted: HomeView()
-                }
-            }
-        }
-        .task { await model.bootstrap() }
+        RecordScreen()
+            .task { await model.bootstrap() }
     }
 }

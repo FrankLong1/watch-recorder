@@ -11,15 +11,18 @@ struct LibraryView: View {
                     ContentUnavailableView(
                         "No Memos Yet",
                         systemImage: "mic",
-                        description: Text("Memos recorded on your Apple Watch appear here once it syncs.")
+                        description: Text("Memos recorded on your Apple Watch appear here once it syncs, and are removed a day after they are transcribed.")
                     )
                 } else {
                     List {
                         ForEach(library.items) { item in
                             row(for: item)
-                        }
-                        .onDelete { offsets in
-                            offsets.map { library.items[$0] }.forEach(library.delete)
+                                .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                    if item.uploadState == .failed {
+                                        Button("Retry") { library.retryUpload(item) }
+                                            .tint(.blue)
+                                    }
+                                }
                         }
                     }
                 }

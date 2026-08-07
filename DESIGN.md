@@ -3,19 +3,48 @@
 ## The experience
 
 ```
-Action button  ──▶  Control  ──▶  App Intent  ──▶  watch app foregrounds
-                                                          │
-                                                          ▼
-                                          recording starts, haptic fires
-                                                          │
-                                    ┌─────────────────────┴─────────────┐
-                                    ▼                                   ▼
-                              Stop & Save                            Cancel
-                                    │                                   │
-                          compress → store → sync                   discard
+        ┌─────────────────────┐              ┌─────────────────────┐
+        │                     │   press ──▶  │                     │
+        │       READY         │              │     RECORDING       │
+        │       (grey)        │  ◀── press   │       (red)         │
+        │                     │              │                     │
+        └─────────────────────┘              └─────────────────────┘
+                  ▲                                     │
+                  └──── compress → store → sync ────────┘
+                              (invisible)
+
+  press = tap anywhere · Action button · Double Tap
 ```
 
-One press. No taps. The first frame the user sees is already recording.
+**The app is one button the size of the screen.** Grey is ready, red is
+recording, and a tap anywhere toggles. There is no timer, meter, cancel,
+confirmation, list, transcript, settings screen or navigation — every one of
+those was removed rather than never built. What is left is the only thing the
+user has to do: decide when to start talking and when to stop.
+
+Everything a memo needs afterwards happens without them, and *while they are
+already recording the next one*: a stop returns to grey immediately and the
+compression, the transfer to the phone, the upload and the eventual deletion all
+run behind the screen. Nothing about a finished memo is ever waited on.
+
+**Red means bytes are hitting the disk.** It is driven by the `.recording`
+phase, which the model enters only once `AVAudioRecorder` is actually writing —
+so the couple of hundred milliseconds an audio session takes to activate are
+grey, not red. The haptic that means "speak" fires on that same transition. A
+lighter one fires the instant the press lands, so the control never feels dead
+while it is honest.
+
+Haptics carry everything the screen doesn't:
+
+| | |
+|---|---|
+| press landed | `.click` — acknowledges, claims nothing |
+| microphone open, speak | `.start` — same instant the screen turns red |
+| stopping | `.stop` |
+| safely saved | `.success` — fires after compression, from behind the screen |
+| a minute before the cap | `.notification` |
+| silence is about to stop this | `.directionDown` — keep talking to veto |
+| something went wrong | `.failure`, plus one word on the screen for 3s |
 
 ## Why this architecture
 
@@ -87,9 +116,62 @@ on disk in a decodable format the whole time.
 
 ### Navigation
 
-There is none. `RootView` switches on recording phase, then on permission.
-A `NavigationStack` push would animate, and when the app is launched by the
-Action button the recording UI has to be the first thing drawn — not the second.
+There is none, and now there is not even a second view to navigate to.
+`RootView` renders `RecordScreen` unconditionally; recording is a colour, not a
+destination. This started as a latency argument — a `NavigationStack` push
+animates, and an Action-button launch has to draw the recording state as its
+first frame — and ended as the whole design.
+
+### What was removed, and why each one had to go
+
+Every item here existed and worked. They were removed because each one asks the
+user to manage something that manages itself, and together they turned a capture
+appliance into an app.
+
+| Removed | Why |
+|---|---|
+| Memo list on the watch | A list implies something to do with it. The useful artifact is the transcript, in Postgres; playback and history belong on the phone, which has the screen for them. |
+| Swipe-to-delete | Deletes the sole copy of a thought, from the smallest target on the smallest screen. Retention deletes it correctly on its own. |
+| Save confirmation (Delete / Done) | Asked a keep-or-discard question about a memo that was already on disk. The answer was always Done. |
+| `Saving…` | Made the user wait on compression to start their next thought — the exact moment they are most likely to have one. |
+| Cancel / discard | The one control that could destroy a recording, sitting next to the one that saves it. An unwanted memo costs a transcription; a lost one costs the thought. |
+| Elapsed timer | Encourages watching the watch while talking to it. The duration cap and its warning haptic handle runaway capture. |
+| Level meter | Decoration. It confirms the microphone works, which the red screen already promises. |
+| Auto-stop settings toggle | A setting on a device with no room for settings. Silence auto-stop is now simply on. |
+| Permission screen | A prompt with no context. The first press asks for the microphone, which is where the request belongs. |
+
+What survived the cut is the list of things that end a recording *without* the
+user: silence, the duration cap, a critical battery, and a lost microphone.
+Those are the real interface, and they are all haptic.
+
+### Memos delete themselves
+
+Neither device is long-term storage for audio, and neither deletes anything
+that has not provably moved on. `Retention` holds the whole rule:
+
+| Device | Deletes when | Never deletes |
+|---|---|---|
+| Watch | 24 h after the **phone** took delivery | anything not `.synced` |
+| Phone | 24 h after the **ingest service** returned `204 No Content` | anything not `.uploaded` |
+
+The window is measured from the hand-off, not from when the memo was recorded,
+so a memo that syncs three days late still gets its full day. A missing
+timestamp means "has not moved on" and never expires — which is what makes a
+week with no network safe: nothing is uploaded, so nothing is deleted, on
+either device.
+
+Because each hop only deletes behind a copy that already exists further along,
+at least one device holds every memo until the transcript exists.
+
+The watch's `transferFile` completion is not the first hand-off. It only says
+WatchConnectivity has finished with its inbox. The phone first atomically
+commits the audio and sidecar, then queues a UUID-only `transferUserInfo`
+receipt back to the watch. Only that receipt marks a memo `.synced` and starts
+watch retention. Content still travels one way; status travels both ways.
+
+The sweep runs on launch, on returning to the foreground, and on the watch's
+background refresh — watchOS will not reliably fire a timer for this, and a
+sweep is cheap and idempotent.
 
 ### Hand-off between processes
 
@@ -118,6 +200,8 @@ Shared/            compiled into more than one target
   StartRecordingIntent    the intent behind the control (watch + control ext)
   Formatting              duration formatting          (all three targets)
   AudioDuration           duration of a file           (all three targets)
+  AudioCompressor         PCM → AAC                     (watch + phone)
+  Retention               when a device may delete its copy   (watch + phone)
 
 WatchControls/     the control extension
   ControlsBundle          @main WidgetBundle
@@ -126,12 +210,12 @@ WatchControls/     the control extension
 WatchApp/
   RecorderModel           state machine: permission, phase, interruptions, battery
   RecordingEngine         AVAudioRecorder + watch audio session
-  AudioCompressor         PCM → AAC, off the main actor
   Latency                 instrumentation for time-to-first-sample
   BackgroundWarmth        keeps the app resident for warm launches
   MemoStore               disk layout, index, crash recovery
   WatchSyncClient         WCSession.transferFile with retry
-  Views/                  RootView, RecordingView, HomeView, PermissionView
+  SilenceMonitor          ends a recording the user walked away from
+  Views/                  RootView (bootstrap) + RecordScreen (the whole UI)
 
 iOSApp/            companion: receives, lists and plays synced memos
 ```
@@ -139,18 +223,28 @@ iOSApp/            companion: receives, lists and plays synced memos
 ## State machine
 
 ```
-idle ──startRecording()──▶ starting ──▶ recording ⇄ paused
-                              │             │         │
-                              │             └─stop────┤
-                              ▼                       ▼
-                           failed                  saving ──▶ saved ──▶ idle
-                                                      ▲
-                        interruption / battery ≤5% ───┘
+              ┌──────────────── stop() ◀──── press
+              │                              silence / 10 min cap
+              ▼                              battery ≤5% / mic lost
+   idle ──▶ starting ──▶ recording ⇄ paused
+   grey      grey          RED       grey        interruption
+     ▲                                            (call, Siri)
+     └── on failure to start
 ```
 
-Interruptions pause rather than stop, so a short Siri invocation doesn't split
-a memo in two. If the microphone can't be reclaimed, whatever was captured is
-saved instead of discarded.
+Four states, and only one of them is red. The machine covers the microphone and
+nothing else: there is no `saving` or `saved`, because `stop()` returns to
+`idle` synchronously and hands the commit to a task that owns everything it
+needs. Two memos can be compressing while a third records.
+
+Failures are not a state. A compressor that gives up posts a `notice` — one
+word, three seconds, over the grey — which is skipped entirely if a recording is
+already underway, so a dead memo can never interrupt a live one.
+
+`paused` is grey on purpose. A call has taken the microphone, nothing is being
+written, and red would be a lie. Interruptions pause rather than stop, so a
+short Siri invocation doesn't split a memo in two; if the microphone can't be
+reclaimed, whatever was captured is saved rather than discarded.
 
 ## Permission
 
@@ -159,3 +253,8 @@ deprecated `AVAudioSession.requestRecordPermission`). The prompt is never shown
 pre-emptively at launch — it appears the first time the user actually asks for a
 memo, so the request has context. If the user was mid-request when the prompt
 appeared, the recording starts the moment they allow it.
+
+There is no permission screen. An undetermined microphone looks exactly like a
+ready one, because the first press is what asks for it. A *denied* microphone is
+the one thing the screen has to spell out — `MIC OFF / ALLOW IN SETTINGS` —
+since no amount of pressing can fix it from here.

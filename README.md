@@ -8,27 +8,38 @@ the only supported way for third-party code to own the Action button.
 ## Status
 
 Draft, and **running**. Verified on the Apple Watch Ultra 3 simulator
-(watchOS 26.5): launches straight into recording, live timer and meter, and
-crash recovery reconstructs a valid AAC memo from a hard-killed session.
+(watchOS 26.5): launches straight into recording, and crash recovery
+reconstructs a valid AAC memo from a hard-killed session.
 
 Not yet on real hardware — the Action button itself has no simulator
 equivalent, so press-to-record latency and control assignment still need an
 Ultra. Setup and the remaining checklist: [DEVICE_TESTING.md](DEVICE_TESTING.md).
+
+## The interface
+
+One button, the size of the screen. **Grey is READY, red is RECORDING**, and a
+tap anywhere toggles — as does the Action button, and Double Tap. There is no
+timer, meter, cancel, confirmation, list or settings screen. Red means audio is
+genuinely reaching the disk, never merely that a press was received.
 
 ## What happens on a press
 
 1. Action button → the assigned control fires `StartRecordingIntent`.
 2. The intent's `supportedModes = .foreground(.immediate)` brings the watch app
    forward at once.
-3. The app sees the pending request and starts recording — haptic, red
-   indicator, running timer.
-4. **Stop** commits the memo; **Cancel** discards it. (Pause still exists
-   internally for phone-call interruptions, but is not a button.)
-5. The memo is compressed to AAC, stored on the watch, and queued for the iPhone.
+3. A light haptic acknowledges the press; the screen stays grey until the
+   recorder is actually writing, then turns red with the "speak" haptic.
+4. A second press stops it. The screen is grey again immediately — compression,
+   the transfer to the phone and the upload all happen behind it, so the next
+   thought never waits on the last one.
+5. Each device deletes its copy of the audio 24 h after the next hop has taken
+   it, and never before. See DESIGN.md §"Memos delete themselves".
 
-Design rationale: [DESIGN.md](DESIGN.md). How the press-to-recording time is
-attacked and hidden: [LATENCY.md](LATENCY.md). What Apple does not allow:
-[LIMITATIONS.md](LIMITATIONS.md).
+Product boundary: [CAPTURE_APPLIANCE.md](CAPTURE_APPLIANCE.md). Design rationale:
+[DESIGN.md](DESIGN.md). The full friction budget — from press-to-recording through
+later review — is [LATENCY.md](LATENCY.md). What Apple does not allow:
+[LIMITATIONS.md](LIMITATIONS.md). Source + camera context brainstorming:
+[SOURCE_CONTEXT.md](SOURCE_CONTEXT.md).
 
 ## Assigning it to the Action button
 
@@ -72,7 +83,7 @@ xcodebuild -project WristMemo.xcodeproj -target "WristMemo Watch App" \
 | `WristMemo` | iOS 26 | Companion — receives, lists and plays synced memos |
 | `WristMemo Watch App` | watchOS 26 | Recording app |
 | `WristMemoControls` | watchOS 26 | Control extension (the Action button entry point) |
-| `WristMemoTests` | watchOS 26 | Swift Testing — storage, formatting, launch latch |
+| `WristMemoTests` | watchOS 26 | Swift Testing — storage, retention, formatting, launch latch |
 | `WristMemoUITests` | watchOS 26 | XCUITest — taps the real watch UI |
 
 ### Signing
@@ -96,7 +107,7 @@ test bundles, then drives the app and asserts on the real container and log.
 
 Scenarios cover a record→save round trip, the pre-armed capture, crash recovery
 with its index ordering, and the first-sample latency marker. Simulator latency
-is not device latency — see [LATENCY.md](LATENCY.md).
+is not device latency — see [the friction budget](LATENCY.md).
 
 ## Verifying on hardware
 

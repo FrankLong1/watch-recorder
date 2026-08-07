@@ -40,7 +40,7 @@ substitute for the same in-process request path.
 - The installed `XCUIApplication.h` exposes `launch`, `terminate`,
   `waitForState`, and `tap` for watchOS (`tap` is unavailable only on tvOS).
   The existing UI also exposes useful labels such as `Record`,
-  `Stop and save recording`, `Discard recording`, `Saved`, and `Done`.
+  `Stop and save recording`, `Discard recording`, and `Saved`.
 
 One local limitation is not a project issue: CoreSimulatorService is unavailable
 in this execution environment, so live simulator commands could not run here.
@@ -163,7 +163,7 @@ production sources into the test bundle as well as the watch app target:
 - `Shared/AudioDuration.swift`
 - `WatchApp/Memo.swift`
 - `WatchApp/MemoStore.swift`
-- `WatchApp/AudioCompressor.swift`
+- `Shared/AudioCompressor.swift`
 
 Keep those source memberships explicit in `project.pbxproj`; do not fork the
 files into copies under the tests directory. Decouple MemoStore's
@@ -208,13 +208,15 @@ same `SWIFT_VERSION = 5.0`. Its primary test should:
 2. launch the app with no recording launch flags;
 3. wait for and tap the `Record` button;
 4. wait for `RECORDING` and tap `Stop and save recording`;
-5. wait for `Saved`, tap `Done`, and verify the memo is visible on Home.
+5. wait for the `Record` button to come back on its own — the Saved screen
+   clears itself, so nothing is tapped after the stop, and the test must not
+   assert on a screen that may already have gone.
 
 Use `waitForExistence(timeout:)` between every transition. Avoid hand-timed
 delays and avoid screen coordinates. Before adding the target, add stable
 SwiftUI accessibility identifiers to the record button, recording state,
-stop/discard buttons, saved state, and Done button. Labels work today, but IDs
-avoid locale, typography, and SF Symbol changes breaking the UI test.
+stop/discard buttons, and saved state. Labels work today, but IDs avoid locale,
+typography, and SF Symbol changes breaking the UI test.
 
 The UI test should not assert audio duration or inspect files. Those assertions
 belong to `sim.sh`; keeping ownership separate makes failures diagnoseable:

@@ -40,6 +40,10 @@ final class WatchAppDelegate: NSObject, WKApplicationDelegate {
         for task in backgroundTasks {
             if task is WKApplicationRefreshBackgroundTask {
                 BackgroundWarmth.schedule()
+                // The only sweep that happens without the user. Without it a
+                // delivered memo sits on the wrist until the app is next
+                // opened, which for a watch app can be days.
+                Task { @MainActor in RecorderModel.shared.store.purgeDeliveredMemos() }
             }
             task.setTaskCompletedWithSnapshot(false)
         }

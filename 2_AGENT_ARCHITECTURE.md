@@ -1,4 +1,4 @@
-# Architecture 2 — transcript to todos
+#  Architecture 2 — transcript to todos
 
 **Date:** 2026-08-06
 **Status:** proposal. Nothing built.

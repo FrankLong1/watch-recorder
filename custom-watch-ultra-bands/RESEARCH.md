@@ -11,12 +11,12 @@ The most compelling truly custom options are leather makers: they can usually va
 
 | Maker | What can be customized | Starting point | Why it stands out | Best for |
 |---|---|---:|---|---|
-| [HAN Leather](https://hanleather.com/product/buttero-cross-stitched-customized-watchband/) | Buttero leather, color, stitching, sizing, name/logo; laser engraving or heat embossing | $70 listed | Strong direct personalization menu and made-to-order language | A refined engraved gift band |
+| [Handdn](https://handdn.com/product/custom-apple-watch-bands/) | Custom-made Apple Watch straps; commission-led configuration | Varies | A direct bespoke strap option rather than an off-the-shelf band | A one-off leather commission |
 | [TRIM Leather](https://www.trimleather.com/products/handmade-apple-watch-band-natural) | Wrist sizing on request; up to three embossed initials included | $45 sale / $55 listed | Natural vegetable-tanned leather and an approachable entry price | A minimalist patina band |
 | [O.R.I.S. Handmade](https://orishandmade.com/en-ca/collections/custom-apple-watch-straps) | Choose leather, color, and hardware in its made-to-order collection | Varies | Useful when you want a deliberate color-and-hardware combination | Full design control without a one-off commission |
 | [Aevus Designs](https://aevusdesigns.com/apple/) | Custom orders for made-to-order handmade luxury leather bands | Request quote / varies | Better fit for a conversation-led bespoke order | A distinctive luxury leather strap |
 | [Rockstar Leatherworks](https://www.rockstarleatherworks.com/) | Design-your-own Apple/iWatch leather cuffs and smart-watch bands | Varies | Cuff silhouettes and more expressive styling than a standard strap | Statement / western / moto styling |
-| [Edelband Atelier](https://en.edelband.com/de-eu/pages/atelier) | Individual configuration via contact form until its custom configurator launches | Request quote | Established strap maker offering a build-to-brief route | A very specific European leather brief |
+| [O2 Leather](https://www.o2leather.com/products/custom-order-full-grain-leather-band-for-apple-watch-1-2-3-4) | Classic, Ferro, slim, or rally custom-order styles | $69 listed | A clearly structured custom-order page with several silhouettes | Rally or sportier leather styling |
 
 ## Three directions worth commissioning
 
@@ -47,13 +47,13 @@ Apple’s band shop lists dedicated Ultra-oriented styles and its product listin
 ## Sources consulted
 
 - [Apple Watch Bands](https://www.apple.com/shop/watch/bands) — current official band lineup and Ultra-oriented styles.
-- [HAN Leather Custom Buttero Band](https://hanleather.com/product/buttero-cross-stitched-customized-watchband/) — listed personalization options and price.
+- [Handdn Custom Apple Watch Bands](https://handdn.com/product/custom-apple-watch-bands/) — bespoke custom-band route.
 - [TRIM Leather Handmade Natural Band](https://www.trimleather.com/products/handmade-apple-watch-band-natural) — made-to-order approach, Ultra sizing, and initials.
 - [O.R.I.S. Custom Apple Watch Straps](https://orishandmade.com/en-ca/collections/custom-apple-watch-straps) — made-to-order material/color/hardware selection.
 - [Aevus Designs Apple Watch Bands](https://aevusdesigns.com/apple/) — custom-order route.
 - [Rockstar Leatherworks](https://www.rockstarleatherworks.com/) — design-your-own cuff and custom-band options.
-- [Edelband Atelier](https://en.edelband.com/de-eu/pages/atelier) — individual configuration contact path.
+- [O2 Leather Custom-Order Band](https://www.o2leather.com/products/custom-order-full-grain-leather-band-for-apple-watch-1-2-3-4) — custom-order leather styles and current listing.
 
 ## Editorial note
 
-This is a buying-research guide, not an endorsement. Check current reviews, return terms, lead times, and shipping terms before ordering—especially for bespoke work.
+This is a buying-research guide, not an endorsement. Check current reviews, return terms, lead times, and shipping terms before ordering—especially for bespoke work. HAN Leather was removed from this guide on August 6, 2026 after its product page returned a connection-refused error.

@@ -12,4 +12,8 @@ struct Memo: Identifiable, Codable, Equatable, Sendable {
     var createdAt = Date()
     var duration: TimeInterval
     var syncState: SyncState = .pending
+    /// When the phone took delivery, which is what the watch's retention window
+    /// is measured from. Optional because "not yet" is the value that keeps a
+    /// memo on the wrist indefinitely — see `Retention`.
+    var syncedAt: Date?
 }

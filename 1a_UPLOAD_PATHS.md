@@ -44,9 +44,12 @@ flowchart LR
     style DB fill:#1a7f37,stroke:#0d4a20,color:#fff
 ```
 
-**Blue is audio at rest. Green is text at rest.** Audio lives permanently on
-both Apple devices and nowhere else — Cloud Run streams it through to OpenAI and
-never writes it.
+**Blue is audio at rest. Green is text at rest.** Audio lives on the two Apple
+devices and nowhere else — Cloud Run streams it through to OpenAI and never
+writes it. Green is the only copy that is permanent: each device deletes its
+audio 24 h after the next hop has taken it (see `Retention` and DESIGN.md
+§"Memos delete themselves"). Nothing that has not moved on is ever deleted, so
+the deletion clock only ever starts behind a copy that already exists.
 
 ---
 
@@ -58,7 +61,7 @@ never writes it.
 | Durable across app death | yes, OS-queued | yes, system daemon |
 | Timing | **system-scheduled — minutes** | ~2 s once it starts |
 | Retry | `sendPending()` on activation + reachability | backoff 30 s → 30 min |
-| Deletes the source | **never** | **never** |
+| Deletes the source | **never** — the sender's copy is deleted later, by the retention sweep, and only once this leg has succeeded | **never** |
 
 Both legs are best-effort on top of a memo that is *already safe on disk*. The
 recording is committed before either is attempted, so no failure anywhere in
@@ -92,11 +95,11 @@ interrupted by the app being killed is picked up on the next launch.
 stateDiagram-v2
     [*] --> pending: arrives from watch
     pending --> uploading: network available
-    uploading --> uploaded: 2xx
+    uploading --> uploaded: exact 204 receipt
     uploading --> pending: 5xx / timeout / offline
     uploading --> failed: 4xx
-    failed --> pending: manual retry only
-    uploaded --> [*]
+    failed --> pending: phone-side Retry action
+    uploaded --> [*]: deleted 24 h later
 
     note right of uploading
         background session —
@@ -130,7 +133,7 @@ flowchart TD
     S2 -->|"no"| K2["🔴 silently disabled<br/><i>← true right now</i>"]
     S2 -->|"yes"| S3{"upload result"}
     S3 -->|"4xx"| K3["🟠 failed, never retried"]
-    S3 -->|"2xx"| OK["🟢 row in Postgres"]
+    S3 -->|"204"| OK["🟢 row in Postgres"]
 
     style K1 fill:#8b1a1a,stroke:#5a0f0f,color:#fff
     style K2 fill:#8b1a1a,stroke:#5a0f0f,color:#fff
@@ -138,9 +141,10 @@ flowchart TD
     style OK fill:#1a7f37,stroke:#0d4a20,color:#fff
 ```
 
-**Nothing is ever lost** — audio is never deleted from either device. But all
-three failure paths are *invisible*, because stage 1 is a one-way door with no
-upload UI.
+**Nothing is ever lost** — every one of these states is one the retention sweep
+refuses to delete, so a stuck memo keeps its audio for as long as it is stuck.
+But all three failure paths are *invisible*, because stage 1 is a one-way door
+with no upload UI.
 
 On real hardware the app is still sitting in the second red box —
 `IngestCredentials.current` is `nil` until the scheme supplies it, so uploads

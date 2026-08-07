@@ -30,14 +30,21 @@ final class RecorderModel {
 
     static let shared = RecorderModel()
 
+    /// What the microphone is doing, and nothing else.
+    ///
+    /// There is deliberately no `saving` or `saved` case. Compression and sync
+    /// take seconds and the user must never wait on them: a stop returns to
+    /// `idle` at once, ready for the next thought, while the memo finishes
+    /// filing itself. See `stop()`.
+    ///
+    /// `recording` is load-bearing beyond the state machine — it is what turns
+    /// the screen red, so it may only be entered once `AVAudioRecorder` is
+    /// actually writing. `starting` exists to keep that promise honest.
     enum Phase: Equatable {
         case idle
         case starting
         case recording
         case paused
-        case saving
-        case saved(Memo)
-        case failed(String)
     }
 
     enum MicPermission {
@@ -54,13 +61,39 @@ final class RecorderModel {
         didSet { if phase == .idle { prearmIfIdle() } }
     }
     private(set) var permission: MicPermission = .undetermined
-    private(set) var elapsed: TimeInterval = 0
-    private(set) var level: Double = 0
-    private(set) var recoveredCount = 0
-    private(set) var lastStartLatencyMilliseconds: Double?
+
+    /// A word shown in place of READY, then cleared on its own.
+    ///
+    /// Deliberately not a phase. Everything that can go wrong here goes wrong
+    /// *after* the recording ended — compression, mostly — by which point the
+    /// user may already have started the next memo, and an error that seizes
+    /// the screen would take the microphone with it.
+    private(set) var notice: String?
+
+    /// Red on the screen, and the only state that means audio is being written.
+    var isRecording: Bool { phase == .recording }
+
+    /// Elapsed time and input level are still measured; nothing displays them.
+    /// They feed the silence detector and the duration cap, which are the two
+    /// things that end a recording when the user forgets to.
+    private var elapsed: TimeInterval = 0
+    private var level: Double = 0
+    /// Seconds left before silence ends the recording, or nil when nothing is
+    /// pending. Not shown — the warning is a haptic, because the whole premise
+    /// is that the user is not looking at the watch.
+    private var autoStopRemaining: TimeInterval?
 
     let store = MemoStore()
     let sync = WatchSyncClient()
+
+    // MARK: - Limits
+
+    /// The backstop that makes every other stop mechanism safe to tune. A
+    /// pocketed watch whose silence detector never fires still cannot record all
+    /// day — which is the privacy problem, not just the battery one.
+    private static let maximumDuration: TimeInterval = 10 * 60
+    /// How long before the cap the warning haptic fires.
+    private static let capWarningLead: TimeInterval = 60
 
     // MARK: - Private
 
@@ -78,9 +111,18 @@ final class RecorderModel {
     private var didDeferredSetup = false
     private var interruptedByCall = false
     private var lastBatteryCheck = Date.distantPast
+    private var silence = SilenceMonitor()
+    /// The monitor is fed real elapsed time rather than the ticker's nominal
+    /// 0.1s: `Timer` drifts, and the thresholds are in seconds of silence.
+    private var lastTick: Date?
+    private var didWarnAboutCap = false
     /// Not derivable from `phase`: `init` sets `.starting` synchronously, so a
     /// phase-based guard would reject the very task `init` queues.
     private var startInFlight = false
+    private var noticeTask: Task<Void, Never>?
+
+    /// Long enough to read a single word on a wrist that has just come up.
+    private static let noticeDuration: Duration = .seconds(3)
 
     private init() {
         Latency.mark("model init")
@@ -122,17 +164,24 @@ final class RecorderModel {
         // Transcoding an orphan can take seconds, so it must never sit between
         // a button press and the microphone opening.
         let recovered = await store.recoverOrphanedCaptures(excluding: engine.reservedCaptureURLs)
-        recoveredCount = recovered.count
         for memo in recovered { sync.send(memo) }
+
+        // After recovery, so a memo rebuilt from a capture is judged on the
+        // sync state it has just been given rather than the one it had before.
+        store.purgeDeliveredMemos()
 
         // The first arm of the session. Deliberately last: it touches the disk,
         // and a launch that is already recording must not wait on it.
         prearmIfIdle()
     }
 
+    /// The Action button is the same control as the screen, so a press while a
+    /// memo is running ends it rather than being swallowed. Unverified on
+    /// hardware: it depends on the control's intent still reaching a foreground
+    /// app, which only an Ultra can prove. See DEVICE_TESTING.md.
     private func handlePendingRequest() {
         guard RecordingLaunchRequest.consume() else { return }
-        Task { await startRecording() }
+        toggle()
     }
 
     func handleScenePhase(_ scenePhase: ScenePhase) {
@@ -145,6 +194,9 @@ final class RecorderModel {
         // Settings and coming back changes `permission` while phase is already
         // idle, so no transition fires.
         prearmIfIdle()
+        // The common case for the reaper: the app is opened, or foregrounded by
+        // the Action button, some time after the memos it holds were delivered.
+        store.purgeDeliveredMemos()
     }
 
     /// Builds the next recorder while the user is doing nothing, so a press only
@@ -184,11 +236,20 @@ final class RecorderModel {
 
     // MARK: - Transport
 
+    /// The whole interface. One control, one gesture, both directions.
+    func toggle() {
+        switch phase {
+        case .recording, .paused:
+            stop()
+        case .idle, .starting:
+            Task { await startRecording() }
+        }
+    }
+
     func startRecording() async {
         // `.starting` is valid only for the task queued by `init` after it has
-        // already set the optimistic first frame. A save must finish before a
-        // new recording can replace the model state it will update on return.
-        guard !startInFlight, phase != .recording, phase != .paused, phase != .saving else { return }
+        // already set the optimistic first frame.
+        guard !startInFlight, phase != .recording, phase != .paused else { return }
         startInFlight = true
         defer { startInFlight = false }
 
@@ -206,15 +267,21 @@ final class RecorderModel {
         engine.beginActivation()
 
         Latency.mark("start requested")
+        // Not `.recording`: the screen goes red off the back of that case, and
+        // it must not turn red until the recorder is genuinely writing.
         phase = .starting
         elapsed = 0
         accumulated = 0
         level = 0
+        autoStopRemaining = nil
+        didWarnAboutCap = false
+        silence.reset()
+        lastTick = nil
+        clearNotice()
 
-        // Fired before the microphone is confirmed open, on purpose. The haptic
-        // acknowledges the press; holding it back until `record()` returns makes
-        // the whole thing feel slower than it is.
-        Haptics.recordingStarted()
+        // Acknowledges the press only. The haptic that means "speak" is fired
+        // below, with the microphone confirmed open.
+        Haptics.pressReceived()
 
         let capture: (id: UUID, url: URL)
         if let armedCapture {
@@ -222,8 +289,8 @@ final class RecorderModel {
         } else {
             let id = UUID()
             guard let url = try? store.newCaptureURL(id: id) else {
-                phase = .failed("Couldn't create the recording file.")
-                Haptics.failed()
+                phase = .idle
+                post(notice: "CAN'T RECORD")
                 return
             }
             capture = (id, url)
@@ -236,90 +303,94 @@ final class RecorderModel {
             recordedAt = now
             startDate = now
             phase = .recording
-            lastStartLatencyMilliseconds = Latency.millisecondsSinceLaunch
+            Haptics.recordingStarted()
             startTicker()
             scheduleDebugAutoStop()
         } catch {
             log.error("Start failed: \(error.localizedDescription, privacy: .public)")
             currentID = nil
             recordedAt = nil
-            phase = .failed(error.localizedDescription)
-            Haptics.failed()
+            phase = .idle
+            post(notice: "CAN'T RECORD")
         }
     }
 
-    /// Stops and saves. There is no separate "save" step by design: on a watch
-    /// the memo is committed the instant recording ends, so nothing can be lost
-    /// between stopping and confirming.
-    func stopAndSave() async {
+    /// Ends the recording and returns to ready *immediately*.
+    ///
+    /// Compression takes seconds and the memo is safe on disk as raw PCM before
+    /// any of it starts, so making the user watch it is pure cost: the second
+    /// thought always arrives while the first is still encoding. The commit is
+    /// handed to a task that owns everything it needs, which is what makes
+    /// overlapping saves safe — nothing it touches afterwards is model state a
+    /// newer recording will have overwritten.
+    func stop() {
         guard phase == .recording || phase == .paused else { return }
         stopTicker()
+        autoStopRemaining = nil
         Haptics.recordingStopped()
 
-        guard let url = engine.stop(), let id = currentID else {
-            currentID = nil
-            recordedAt = nil
-            phase = .idle
-            return
-        }
+        let url = engine.stop()
+        let id = currentID
+        let startedAt = recordedAt
         currentID = nil
-        let recordedAt = recordedAt
-        self.recordedAt = nil
-        await commit(
-            captureURL: url,
-            id: id,
-            recordedAt: recordedAt,
-            failureMessage: "That memo was too short to save."
-        )
+        recordedAt = nil
+        elapsed = 0
+        phase = .idle
+
+        guard let url, let id else { return }
+        Task { await commit(captureURL: url, id: id, recordedAt: startedAt, failureNotice: "TOO SHORT") }
     }
 
     /// The one place a capture becomes a memo. Shared by the normal stop and the
     /// unexpected-stop path, which must never diverge from it.
+    ///
+    /// Touches `phase` only through `post(notice:)`, and that refuses to
+    /// interrupt a recording — by the time this returns, the user may be two
+    /// memos further on.
     private func commit(
         captureURL: URL,
         id: UUID,
         recordedAt: Date? = nil,
-        failureMessage: String
+        failureNotice: String
     ) async {
-        phase = .saving
         if let memo = await store.finalize(captureURL: captureURL, id: id, recordedAt: recordedAt) {
             sync.send(memo)
-            phase = .saved(memo)
             Haptics.saved()
         } else {
-            phase = .failed(failureMessage)
-            Haptics.failed()
+            post(notice: failureNotice)
         }
     }
 
-    func cancelRecording() {
-        guard phase == .recording || phase == .paused else { return }
-        stopTicker()
-        if let url = engine.stop() {
-            store.discardCapture(at: url)
+    // MARK: - Notices
+
+    private func post(notice: String) {
+        Haptics.failed()
+        // A recording underway owns the screen. The log keeps the detail either
+        // way; a memo in progress is worth more than a word about a dead one.
+        guard phase == .idle else {
+            log.error("Suppressed notice while recording: \(notice, privacy: .public)")
+            return
         }
-        currentID = nil
-        recordedAt = nil
-        phase = .idle
-        elapsed = 0
-        Haptics.discarded()
+        self.notice = notice
+        noticeTask?.cancel()
+        noticeTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.noticeDuration)
+            guard !Task.isCancelled else { return }
+            self?.notice = nil
+        }
     }
 
-    func dismissResult() {
-        phase = .idle
-        elapsed = 0
-    }
-
-    func delete(_ memo: Memo) {
-        store.delete(memo)
-        Haptics.discarded()
+    private func clearNotice() {
+        noticeTask?.cancel()
+        noticeTask = nil
+        notice = nil
     }
 
     private func scheduleDebugAutoStop() {
         guard let seconds = DebugOptions.autoStopAfter else { return }
         Task {
             try? await Task.sleep(for: .seconds(seconds))
-            await stopAndSave()
+            stop()
         }
     }
 
@@ -341,15 +412,66 @@ final class RecorderModel {
     }
 
     private func tick() {
+        let now = Date()
         // Battery is checked on wall-clock, not on a tick count, so the interval
         // does not silently change with the UI refresh rate.
-        if Date().timeIntervalSince(lastBatteryCheck) >= 5 {
-            lastBatteryCheck = Date()
+        if now.timeIntervalSince(lastBatteryCheck) >= 5 {
+            lastBatteryCheck = now
             checkBattery()
         }
         guard phase == .recording, let startDate else { return }
-        elapsed = accumulated + Date().timeIntervalSince(startDate)
+        elapsed = accumulated + now.timeIntervalSince(startDate)
         level = engine.currentLevel()
+
+        let delta = lastTick.map { now.timeIntervalSince($0) } ?? 0
+        lastTick = now
+        guard delta > 0 else { return }
+
+        guard !enforceDurationCap() else { return }
+        updateSilence(delta: delta)
+    }
+
+    // MARK: - Automatic stops
+
+    /// Returns true once the cap has ended the recording, so the caller stops
+    /// doing anything else to state that is already on its way out.
+    private func enforceDurationCap() -> Bool {
+        if elapsed >= Self.maximumDuration {
+            log.notice("Duration cap reached; saving recording")
+            autoStopRemaining = nil
+            stop()
+            return true
+        }
+        if !didWarnAboutCap, elapsed >= Self.maximumDuration - Self.capWarningLead {
+            didWarnAboutCap = true
+            Haptics.durationWarning()
+        }
+        return false
+    }
+
+    private func updateSilence(delta: TimeInterval) {
+        guard AutoStopSetting.isEnabled else {
+            autoStopRemaining = nil
+            return
+        }
+
+        switch silence.ingest(level: level, delta: delta) {
+        case .listening:
+            // Only clear on the transition, so a talking user isn't writing nil
+            // over nil ten times a second.
+            if autoStopRemaining != nil { autoStopRemaining = nil }
+
+        case .armed(let remaining):
+            // The haptic is the real notification here — the whole point is that
+            // the user is not looking at the watch.
+            if autoStopRemaining == nil { Haptics.autoStopArmed() }
+            autoStopRemaining = remaining
+
+        case .elapsed:
+            log.notice("Silence auto-stop fired")
+            autoStopRemaining = nil
+            stop()
+        }
     }
 
     /// The watch powers off before it warns the app, so save early rather than
@@ -360,7 +482,7 @@ final class RecorderModel {
         guard device.batteryState != .charging, device.batteryLevel >= 0 else { return }
         if device.batteryLevel <= 0.05 {
             log.notice("Battery critical; saving recording")
-            Task { await stopAndSave() }
+            stop()
         }
     }
 
@@ -384,7 +506,7 @@ final class RecorderModel {
             Task { @MainActor in
                 // The session and recorder are gone; salvage what was written.
                 self?.log.error("Media services reset mid-recording")
-                await self?.stopAndSave()
+                self?.stop()
             }
         }
     }
@@ -395,12 +517,18 @@ final class RecorderModel {
         startDate = nil
         phase = .paused
         level = 0
+        autoStopRemaining = nil
+        silence.vetoStop()
     }
 
     private func resumeTransport() -> Bool {
         guard engine.resume() else { return false }
         startDate = Date()
         phase = .recording
+        // Without this the first tick after the call would hand the monitor a
+        // delta covering the entire interruption and stop the memo immediately.
+        lastTick = nil
+        silence.vetoStop()
         return true
     }
 
@@ -426,7 +554,7 @@ final class RecorderModel {
             }
             if options?.contains(.shouldResume) != true || !resumeTransport() {
                 // Can't get the microphone back — keep what was captured.
-                Task { await stopAndSave() }
+                stop()
             }
 
         @unknown default:
@@ -438,10 +566,10 @@ final class RecorderModel {
     /// reached disk is still a valid PCM capture, so file it as a memo.
     private func handleUnexpectedStop(captureURL: URL?) {
         stopTicker()
-        guard let captureURL, let id = currentID else {
-            phase = .idle
-            return
-        }
+        // Back to ready before the salvage runs, for the same reason a normal
+        // stop is: the user's next thought must not wait on the last one.
+        phase = .idle
+        guard let captureURL, let id = currentID else { return }
         currentID = nil
         let recordedAt = recordedAt
         self.recordedAt = nil
@@ -450,7 +578,7 @@ final class RecorderModel {
                 captureURL: captureURL,
                 id: id,
                 recordedAt: recordedAt,
-                failureMessage: "Recording stopped unexpectedly."
+                failureNotice: "RECORDING LOST"
             )
         }
     }

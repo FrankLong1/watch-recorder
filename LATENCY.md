@@ -1,186 +1,405 @@
-# Fighting latency
+# The friction budget
 
-The demo is one thing: press the Action button, be recording. Everything in this
-file serves that.
+WristMemo is trying to make a useful thought cost almost nothing to keep.
 
-## Where the time actually goes
+That is broader than launch speed. A memo has failed the product if the user
+has to remember an incantation, look down to find a target, wait to know when to
+speak, explain where it belongs, repair a clipped first sentence, or wonder
+whether it ever arrived.
 
+The product loop is:
+
+```text
+thought occurs → intentional action → clear start cue → speak naturally
+             → end with no ceremony → trust it is safe → find it in context later
 ```
-  press ──▶ system resolves control ──▶ app process launches ──▶ SwiftUI comes up
-                                                                       │
-                                        audio session activates ◀───────┤
-                                                                       │
-                                        recorder prepares ◀────────────┤
-                                                                       ▼
-                                                              first sample on disk
-```
 
-Split into what the app can and cannot touch:
+The ideal feels like a reflex: **think, press, speak, trust it.**
 
-| Segment | Who controls it | Rough share |
-|---|---|---|
-| Press → process exec | **System.** Only influenceable by staying resident. | Dominant on a cold launch |
-| Process exec → app code running | System (dyld, Swift runtime, SwiftUI) | Large |
-| App code → session active | **App** | ~100–500 ms if done badly, near-free if overlapped |
-| Session active → `record()` returns | **App** | Small once pre-armed |
+`LATENCY.md` keeps its historical filename because time-to-first-sample is still
+the sharpest technical problem. But it is now the repository's complete friction
+model. `AGENTS.md` is the short version of the same north star.
 
-The uncomfortable conclusion: **most of the latency is launch, and the biggest
-lever is not launching at all** — being warm already.
+## The watch is a capture appliance, not a memo app
 
-## What is implemented
+The cleanest way to reduce friction is to remove capability from the wrist.
+The watch should do only the work that cannot happen somewhere else or later:
 
-### 1. Start from `init`, not from a view
-
-`RecorderModel.init` runs while the App struct is being built, before SwiftUI
-lays out a single view. The launch request is claimed there and recording
-starts there. Doing it in `RootView.task` — the obvious place — costs a whole
-frame plus view construction first.
-
-Side benefit: the recording UI is the **first frame drawn**, so there is no
-visible flash of the home screen.
-
-### 2. Overlap session activation with launch
-
-`AVAudioSession.activate(options:completionHandler:)` is fired synchronously
-from `init`, not wrapped in a `Task`. During launch the main actor is saturated
-bringing SwiftUI up, so anything scheduled with `Task` queues *behind* it.
-Calling the completion-handler API directly gets the request in flight
-immediately, and the completion lands the moment the actor frees up.
-
-Measured in the simulator: activation requested at 4969 ms, `didFinishLaunching`
-at 10541 ms, session active at 11268 ms. The request was in flight ~5.5 seconds
-before launch finished. Serially it would have started only after.
-
-Because a speculative early activation can legitimately fail (app not frontmost
-yet), a failure is retried once at record time rather than failing the memo.
-
-### 3. Category configured early, activation deferred
-
-Apple's guidance is explicit: configure the session as early as possible,
-because once it is activated it is too late, and changing category mid-flight is
-expensive. So `setCategory(.record)` happens in `init`; activation is separate
-because activating lights the microphone indicator.
-
-### 4. Pre-arm the recorder while idle
-
-When the app is foreground and idle it builds the *next* `AVAudioRecorder` and
-calls `prepareToRecord()`, which does the file creation and encoder setup up
-front. A press then costs little more than `record()`.
-
-### 5. Nothing slow on the hot path
-
-This was the biggest self-inflicted wound. The original `bootstrap()` did, in
-order: load the memo index, activate WatchConnectivity, **transcode any orphaned
-capture**, and only then handle the launch request. A single recovered memo
-could put a multi-second transcode between the button press and the microphone
-opening.
-
-Now everything non-essential runs *after* recording is underway. Recovery has to
-exclude the in-flight capture, or it would eat the file being recorded into.
-
-### 6. Stay warm: complication + background refresh
-
-Apple's documented behaviour:
-
-- Apps in the **Dock** are kept in memory.
-- A **complication on the active face** tells the system to keep the app in a
-  ready-to-launch state — it tries to keep it resident.
-- **Background refresh** wakes the app periodically; the budget is roughly one
-  wake per hour, shared across Dock apps.
-
-So the project ships an `accessoryCircular` / `accessoryCorner` complication
-(`RecordComplication`) and schedules a refresh every 45 minutes. Neither is a
-guarantee — they are nudges that make a warm launch more likely.
-
-**For the demo, this is the single highest-value action:** put the complication
-on the active watch face and the app in the Dock.
-
-## Hiding what is left
-
-Perceived latency is not measured latency. These are cheap and effective:
-
-### Implemented
-
-- **Haptic before confirmation.** `Haptics.recordingStarted()` fires when the
-  attempt begins, not when `record()` returns. The haptic is the user's
-  acknowledgement that the press registered; withholding it until the microphone
-  is confirmed makes the whole interaction feel slower than it is. A failure
-  haptic follows if it does not work out.
-- **Optimistic UI.** The recording chrome — red dot, timer, meter — renders
-  during `.starting`, so the screen says "recording" the instant it appears. The
-  timer itself only counts from the real audio start, so the *number* stays
-  honest even though the chrome is eager.
-- **No navigation animation.** No `NavigationStack` push into the recording
-  screen; a transition would add perceived delay on top of real delay.
-- **Fixed-width digits** so the timer does not jitter, which reads as smoother.
-
-### Worth trying
-
-- **A short rising tone** on start. Audio feedback is perceived earlier than
-  visual and masks a gap well. Costs a speaker route, so it may fight the
-  recording — test before adopting.
-- **Pre-rendered first frame.** watchOS snapshots apps for the Dock. If the
-  snapshot showed the recording screen, the visual transition would be instant
-  even while the process is still coming up.
-- **Progressive disclosure.** Draw the dot and timer first, defer the meter for
-  a frame or two. Less work before the first frame.
-- **Deliberate honesty at the edge.** If start ever exceeds ~1 s, showing a
-  distinct "starting…" state beats a frozen fake timer.
-
-## Ideas considered and rejected
-
-| Idea | Why not |
+| Must happen on the watch, now | Should happen downstream, later |
 |---|---|
-| Record from the background so no launch is needed | watchOS only opens the microphone for a foreground app. Hard block. |
-| `AudioRecordingIntent` to record from the control | Requires an active Live Activity, which a watch app cannot originate. Recording would stop. |
-| Keep the session activated while idle | Lights the microphone indicator permanently. Misleading, and a privacy smell. |
-| `WKExtendedRuntimeSession` to stay alive | No audio-recording session type; the types that exist are invalidated when the app backgrounds. |
-| Pre-roll buffer so audio predates the press | Nothing is running before launch. Cannot capture what was never recorded. |
-| Lower sample rate for faster encoder setup | Setup cost is dominated by file creation, already handled by pre-arming. Would cost quality for nothing. |
+| Receive an intentional trigger | Transcribe and improve the transcript |
+| Pre-warm and start the microphone | Extract names, dates, entities, claims, and routes |
+| Give truthful haptic/state feedback | Title, summarise, search, and organise |
+| Stop safely and protect against runaway capture | Link a thought to earlier thoughts, calendar context, and sources |
+| Commit recoverable audio locally | Produce daily reviews, reminders, and investment research views |
+| Queue a hand-off and expose a real delivery problem | Configure behaviour, integrations, workflows, and agent drafts |
 
-## Measuring it
+This is not “missing functionality.” It is a boundary. A feature that acts on
+audio after it is safely captured gains nothing from competing for the speaker's
+attention on a 49 mm screen.
 
-In-process instrumentation cannot see the press — the process does not exist
-yet. `Latency` marks time since process exec (via `sysctl`), which is the
-closest observable proxy:
+The ideal watch UI is therefore closer to a microphone appliance than a notes
+application: no library, no transcript, no routing screen, no title field, no
+destination picker, no configuration maze. The normal capture path should not
+ask a question.
 
+### Delete buttons before adding intelligence
+
+Every control creates a choice, a target, and a failure mode. Use this test:
+
+> If this button vanished, would a real thought become harder to capture
+> **safely**?
+
+If no, delete it or move it to the phone/server.
+
+That produces a deliberately small surface:
+
+| Control or screen | Target | Why it stays or goes |
+|---|---|---|
+| Action button / Control / complication | **Keep** | Intentional start without app hunting. |
+| Double Tap and second Action press | **Add when verified** | Remove the need to look down to stop. |
+| Silence arm-warn-veto | **Keep as default behaviour** | Ends normal thoughts without a deliberate action. |
+| One large Stop fallback | **Keep** | Deterministic escape hatch when gesture or silence fails. |
+| Cancel / Discard | **Challenge hard** | Deletes the sole source of truth; empty accidental captures can be handled safely instead. |
+| In-app Record button | **Demote to fallback** | The dedicated external trigger is the product. Keep only where it enables a genuine non-Ultra/direct-launch path. |
+| Auto-stop toggle on the recording watch | **Move out of the normal path** | A safe default beats a per-capture setting; exceptional configuration belongs downstream. |
+| Timer and recording indicator | **Keep, passive** | Reassures a glance without demanding interaction. |
+| Level meter | **Optional / defer** | It provides little capture value unless hardware tests show it prevents a real problem. |
+| Memo list, playback, transcripts, routes, settings | **Remove from the watch** | They are management and review, not capture. |
+
+The point is not to remove the last emergency fallback for aesthetic purity. It
+is to make the fallback so rarely needed that the normal experience has no
+buttons at all: press to begin; speak; stop happens naturally; feel confirmation.
+
+**This table has since been actioned, and it went further than "demote".** The
+watch UI is now a single full-screen button — grey READY, red RECORDING — and
+the timer, level meter, auto-stop toggle, memo list, cancel and save
+confirmation are gone rather than demoted. The "one large Stop fallback" and the
+"in-app Record button" turned out to be the same control as each other and as
+the screen itself, which is what made the reduction possible. See DESIGN.md
+§"What was removed, and why each one had to go".
+
+The one row that moved *up*: red now means audio is genuinely being written, so
+"a truthful start cue" is enforced by the state machine rather than by
+convention.
+
+## What counts as friction
+
+| Friction | The user experiences it as | The design response |
+|---|---|---|
+| **Invocation** | “How do I start this?” | A dedicated, reliable trigger; no app hunting. |
+| **Time to speech** | “Should I start talking yet?” | A truthful start cue and a short, measured path to the first sample. |
+| **Hands and eyes** | “I need to stop walking / put something down / hit a tiny target.” | Physical or gesture controls; large deterministic fallback controls. |
+| **Decision** | “Where should this go? What should I call it?” | Capture first; infer or route later. |
+| **Boundary** | “Did it stop? Did it save? Did it cut me off?” | Safe auto-stop, distinct haptics, and a one-press continuation path. |
+| **Trust** | “Did that thought disappear?” | Durable local audio, visible status, reconciliation, and repair. |
+| **Re-entry** | “Why did I record this, and when is it useful?” | Automatic context plus the right review moment, not a pile of audio files. |
+
+Optimising only the first row that can be timed produces a fast recorder. Solving
+all seven produces an external memory.
+
+## Non-negotiable design rules
+
+1. **The capture-time budget is one intentional action.** A person may speak
+   naturally, but they should not be asked to choose a route, title, tag, or
+   destination before the mic is live.
+2. **A start cue must be honest.** A cue meaning “I saw the press” is useful;
+   a cue meaning “speak now” must mean a sample is reaching durable storage.
+   Do not trade opening words for fake immediacy.
+3. **End slowly rather than cutting off speech.** A few seconds of trailing
+   silence are cheap. A lost final clause is not. Automatic stopping needs an
+   audible warning and an easy veto.
+4. **Audio is the primary evidence.** Transcript, route, summary, and agent
+   output are fallible derivatives. Keep the source through a confirmed
+   hand-off and make it reachable when interpretation matters.
+5. **Context should be captured automatically or after the fact.** The thought
+   itself must never wait for the metadata model.
+6. **Every stalled thought needs a visible path to recovery.** Silent failure is
+   the highest-friction outcome: it makes the reflex unsafe.
+7. **A feature earns its complexity only if it removes a real observed
+   obstacle.** More capture controls are usually friction in disguise.
+
+## The current shortest path
+
+For an Ultra user, the intended path is already close:
+
+```text
+thought → Action button → press acknowledgement → mic becomes live → speak
+        → silence / Double Tap / Stop → saved haptic → phone and ingest retry themselves
 ```
-[latency] model init
-[latency] activation requested
-[latency] didFinishLaunching
-[latency] session active
-[latency] start requested
-[latency] first sample
+
+The action button removes app-finding; the recording view is the first frame;
+the recorder is pre-armed; Double Tap, silence auto-stop, and a large Stop button
+provide layered ways out. The remaining work is to make each arrow dependable
+on a real wrist, then make the memo useful at the other end.
+
+For non-Ultra watches, a complication or Siri remains a worse start path. Do not
+pretend otherwise. The right strategy is to make the primary Ultra interaction
+excellent, retain thin universal fallbacks, and measure whether another capture
+surface solves an actual problem.
+
+## 1. Remove invocation friction
+
+### The best start is a physical affordance
+
+The Action button is the right default because it can be pressed without
+looking, navigating, or holding the watch steady. The manual Control assignment
+is unavoidable Apple setup friction, so onboarding should do only what is
+necessary:
+
+- explain the payoff in one sentence;
+- take the user to the exact assignment step;
+- run one test capture that proves the whole reflex; and
+- get microphone permission before a real thought is at stake.
+
+Do not build a tutorial carousel, route setup, folder selection, or settings
+tour in this moment. The first-run goal is one successful capture.
+
+### Start alternatives should be adapters, not separate products
+
+Use the same `StartRecordingIntent` behind a Control Center control,
+complication, Smart Stack surface, and Siri shortcut. They are availability
+fallbacks, not invitations to create different workflows.
+
+Useful experiments, in order:
+
+1. **Second Action-button press stops.** This could make the entire session
+   eyes-free for Ultra users. It is blocked only on real-device verification
+   that the second intent reaches the live recorder reliably.
+2. **An elapsed-time Smart Stack stop surface.** This closes the Return-to-Clock
+   hole on longer recordings and helps watches without an Action button.
+3. **A phone lock-screen / shortcut capture fallback.** Only if dogfooding shows
+   real thoughts occur while the watch is unavailable. It must preserve the same
+   no-picker start contract.
+
+Avoid speculative motion gestures, voice wake words, or a permanent listening
+mode. They create false starts, privacy cost, and new things to remember.
+
+## 2. Make “start speaking now” unambiguous
+
+Milliseconds matter because the first words often carry the thesis, a name, or
+the intended route. But the real metric is not time from button press to a red
+screen. It is time from button press to **the user safely beginning the thought**.
+
+### Two signals, two promises
+
+Current code fires a start haptic before `record()` confirms the microphone. It
+acknowledges a recognised press and makes the interaction feel responsive, but
+it cannot safely be treated as a “go ahead and speak” cue.
+
+Test two variants on hardware:
+
+| Variant | First signal means | Second signal means | Risk |
+|---|---|---|---|
+| Current | “I received your press.” | Visual state only | A user may speak before audio is live. |
+| Two-phase haptic | light click: “press received” | distinct start haptic: “mic is live” | Adds a tiny learnable beat. |
+| One truthful haptic | “mic is live; speak” | none | Feels slower if launch remains noticeable. |
+
+The winner is the one that produces the fewest clipped openings in walking,
+eyes-forward use—not the one that looks fastest in a demo. A practical hybrid is
+a subtle press click followed by the existing stronger start haptic on the first
+confirmed sample.
+
+### Keep launch work out of the thought path
+
+These are implemented and remain correct:
+
+- Claim the launch request in `RecorderModel.init`, before SwiftUI lays out a
+  view, so recording UI is the first frame.
+- Configure the audio session immediately and overlap activation with process
+  launch.
+- Pre-arm the next `AVAudioRecorder` while the app is idle, moving file and
+  encoder setup out of the press path.
+- Defer index loading, WatchConnectivity setup, orphan recovery, compression,
+  and storage cleanup until capture is underway.
+- Keep the app more likely to be warm with a complication, Dock placement, and
+  background-refresh requests. These are hints, not guarantees.
+
+Further experiments worth measuring before adopting:
+
+- Render only a bare recording shell on the Action-button launch path; defer
+  the meter until the first sample.
+- Maintain a prepared recorder immediately after each save, not just after the
+  next normal app bootstrap.
+- Record raw PCM first and compress later, if profiling shows AAC setup still
+  sits on the hot path.
+- Test whether Return to App materially improves the warm-start distribution;
+  ask users to enable it only if it does.
+
+Do **not** use an always-on pre-roll or ring buffer by default. It records audio
+before a deliberate capture action and introduces privacy and consent risk. A
+short, explicit, opt-in, wrist-raised experiment could be reconsidered only if
+hardware measurements show ordinary start latency is genuinely unacceptable.
+
+### Measurement
+
+In-process marks are still useful:
+
+```text
+model init → activation requested → start requested → first sample
 ```
 
-On device:
+`Latency` logs time since process execution because the button press happens
+before the process exists. For the user-visible number, film a real watch at
+240 fps from button actuation to the cue that means “speak now.”
 
-```bash
-log stream --predicate 'subsystem == "com.franklong.wristmemo"'
+Record a small field dataset, not one heroic demo:
+
+- Release build, cold / warm / app-frontmost;
+- wrist down, walking, sitting, holding a cup, gloves if relevant;
+- first-word clipping rate, not only milliseconds;
+- Action press → first sample p50 and p95; and
+- whether the user starts speaking before the truthful cue.
+
+Treat simulator figures as ordering signal only. They are not device latency.
+
+## 3. Remove stopping and boundary friction
+
+Stopping should be easier than starting, but biased toward continuing. The user
+often stops mid-thought, while moving or holding something; a false positive
+deletes the part they cared about.
+
+The layered stop design is right:
+
+| Layer | Role | Constraint |
+|---|---|---|
+| Large Stop button | Deterministic universal fallback | Always above the fold. |
+| Double Tap | Eyes-free stop on S9+ | Targets Stop, never Discard. |
+| Second Action press | Best Ultra interaction | Verify delivery to the active recorder. |
+| Silence arm → warn → veto | Zero-action normal ending | Must fail toward running long. |
+| Duration cap | Privacy/battery backstop | Warn before it saves. |
+
+The silence monitor's arm-warn-veto flow is the right shape: a haptic announces
+an impending save; speech, touch, or crown movement vetoes it; then saving has
+its own distinct confirmation. Its thresholds must be tested with wrist-away
+speech, quiet rooms, cars, streets, and cafés.
+
+The next high-value boundary improvement is **continue last memo**. If a new
+capture starts within a short window after an auto-stop or deliberate stop, let
+the user append it to the prior thought (or present it as one logical chain).
+That makes a premature stop cost one press instead of a broken thought, which
+lets automatic stopping stay helpful rather than timid.
+
+Never add a post-stop “Save or discard?” screen. The existing commit-then-brief
+saved confirmation is the right default: once the user stops, it is safe.
+
+## 4. Capture context without asking for it
+
+The key phrase is not merely “voice capture”; it is **thought context capture**.
+The speaker should not have to manufacture context in a form before speaking.
+
+Every memo can carry zero-effort context:
+
+- recorded time, timezone, duration, trigger surface, and whether it was
+  explicitly stopped or auto-stopped;
+- a link to adjacent memos: “continued from” and “followed by”; and
+- later-derived entities, people, dates, tickers, claims, questions, and
+  confidence—always traceable back to the audio and transcript.
+
+Useful ideas to validate:
+
+1. **Natural spoken prefixes, never mandatory syntax.** “Investment idea…” or
+   “follow up…” can route a note, but failure to say one must never block capture
+   or make a memo second class. Store the raw prefix and the derived route.
+2. **Correction memos.** “Correction to my last memo: the ticker was Natera.”
+   Link it to the prior memo; do not overwrite primary audio or pretend a model
+   was right.
+3. **Thought chains.** Detect a short follow-up capture, “also…”, or a shared
+   entity and let review present the sequence as one evolving thought.
+4. **Context handoff from another surface.** A future share-sheet/browser action
+   can attach an article or screenshot to a memo response, but must be optional.
+   It is for cases where a source exists—not a new prerequisite for speaking.
+5. **Calendar/activity context, opt-in.** Attach a meeting title or active
+   workout only where that context is genuinely useful and private enough. Never
+   surprise-capture location or third-party context just because an API permits
+   it.
+
+Do not force a taxonomy at capture time. A good system can ask later, when it
+has a transcript and the person has a full screen, “Was this a decision, task,
+question, observation, or reference?”
+
+## 5. Make trust frictionless
+
+“Trust it” means a person should neither babysit a transfer nor discover weeks
+later that a thought never arrived. The project already has durable local audio,
+queued WatchConnectivity, retries, and crash recovery. The remaining gaps are
+mainly visibility and proof.
+
+Build these before elaborate intelligence:
+
+1. **A verified receipt per hop.** A watch-side `WCSession` completion is not
+   proof that the phone imported the file; an HTTP 2xx with a captive-portal body
+   is not proof that the server committed it. Model each hand-off distinctly.
+2. **Status-only reconciliation.** Compare watch/phone memo IDs to database
+   receipts and surface an age-based “needs attention” count. This preserves the
+   one-way *content* boundary while detecting missing thoughts.
+3. **A repair action.** Failed authentication, a too-large file, import failure,
+   and a stalled queue need a retry path a human can actually reach.
+4. **Fault-injection coverage.** Treat captive portals, missing metadata,
+   phone-full imports, bad credentials, a database failure after transcription,
+   and compression fallback as normal test scenarios.
+5. **Retention only behind proof.** Never reclaim the last usable audio copy on
+   a status inferred from an earlier hop.
+
+The detailed catalogue and current rankings live in `FAILURE_MODES.md`.
+
+## 6. Make later use effortless too
+
+Audio captured perfectly but never resurfaced is still friction deferred.
+The initial downstream product should be a review loop, not a generic memo
+library and not an autonomous executor.
+
+Good review moments:
+
+- a daily “unreviewed thoughts” digest;
+- a weekly summary of new ideas, open questions, and changes of mind;
+- before an earnings event or meeting, the relevant prior observations;
+- when a stated time horizon arrives, an invitation to revisit the prediction;
+- a contradiction prompt: “this differs from what you said about X last month.”
+
+For investment research, derive a structured but revisable record:
+
+```text
+entity/ticker · claim · evidence · catalyst · falsifier · horizon · confidence
 ```
 
-In DEBUG the recording screen also prints `NNNms to first sample`.
+Blank is better than hallucinated. Each field should link to the source memo,
+and any agent should draft a review item—not execute an external action. This
+same model generalises beyond investing to tasks, questions, observations, and
+personal decisions.
 
-**Two cautions.**
+## The next experiments to run
 
-1. All numbers so far are from the **simulator, Debug**. They are inflated and
-   noisy — cold launches measured 1.9 s, 2.2 s and 5.3 s to `model init` on
-   identical runs. Treat the *deltas* as signal and the absolutes as garbage.
-   Release on device will be far quicker.
-2. For the real press-to-recording number, instrument nothing: **film it**. A
-   240 fps slow-motion video of thumb-on-button to red-dot-on-screen gives the
-   number the demo is actually judged on, including the system launch the app
-   cannot see.
+This is the concrete backlog, ranked by reduction in real user friction rather
+than novelty:
 
-## If it still feels slow on device
+1. **Hardware field test the complete reflex.** Verify control assignment,
+   cold/warm starts, first-word clipping, Return-to-Clock behaviour, Double Tap
+   stop, second Action-button delivery, and auto-stop in real environments.
+2. **Separate press acknowledgement from a truthful “speak now” cue.** Test it
+   against the current single haptic and choose based on clipped-opening rate.
+3. **Implement status receipts, reconciliation, and a visible repair count.**
+   This makes the reflex safe enough to become habitual.
+4. **Build continue-last-memo.** It reduces stopping risk and turns fragmented
+   thought capture into a coherent chain.
+5. **Ship a daily review surface.** Do this before building more capture modes;
+   it closes the loop that makes recording a thought worthwhile.
+6. **Add correction memos and flexible extraction.** Improve context without
+   burdening the moment of capture.
 
-In rough order of expected payoff:
+## Things to resist
 
-1. Build **Release**, not Debug. Debug launches are dramatically slower.
-2. Put the complication on the active face and the app in the Dock — turns cold
-   launches into warm ones.
-3. Check whether the app is being jettisoned between presses; if so, the warmth
-   levers are not working and nothing else will save it.
-4. Trim launch work further — the root view could branch to a bare recording
-   view with no `List` types referenced at all on the recording path.
-5. Consider dropping the level meter from the first frame.
+These are interesting, but require strong evidence before they are allowed to
+complicate the reflex:
+
+- permanent listening, long pre-roll buffers, or ambient capture;
+- mandatory voice commands, spoken category menus, or a stop wake word;
+- live transcription while speaking;
+- more than one deliberate capture-time choice;
+- a dense watch library, history browser, or settings-heavy home screen;
+- “AI agents” that take consequential actions from an imperfect transcript;
+- integrations added because they are possible rather than because they remove
+  a specific observed point of friction.
+
+The test is simple: if removing the feature would not make a real thought harder
+to capture, trust, or use later, it does not belong on the critical path.

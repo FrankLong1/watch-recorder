@@ -7,17 +7,21 @@ import Foundation
 /// Labels alone were the alternative, but they break on copy edits, locale, and
 /// SF Symbol changes — none of which should fail a test.
 enum AccessibilityID {
+
+    /// The whole screen. There is nothing else to identify.
     static let recordButton = "record-button"
-    static let recordingStatus = "recording-status"
-    static let elapsedTimer = "elapsed-timer"
-    static let stopButton = "stop-button"
-    static let discardButton = "discard-button"
-    static let savedTitle = "saved-title"
-    static let savedDuration = "saved-duration"
-    static let doneButton = "done-button"
-    static let deleteSavedButton = "delete-saved-button"
-    static let failureMessage = "failure-message"
-    static let failureDismissButton = "failure-dismiss-button"
-    static let memoList = "memo-list"
-    static let emptyHint = "empty-hint"
+
+    /// The word on the screen, which is also the button's accessibility value.
+    ///
+    /// These are user-visible copy *and* the tests' only view into the state
+    /// machine, which is the price of an interface with one element: there is
+    /// no separate status element to query, because SwiftUI folds a button's
+    /// label into a single accessibility node. Shared so a copy edit breaks the
+    /// build rather than the test.
+    enum StatusText {
+        static let ready = "READY"
+        static let recording = "RECORDING"
+        static let paused = "PAUSED"
+        static let micOff = "MIC OFF\nALLOW IN SETTINGS"
+    }
 }
