@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { multipart, transcribe, TranscriptionError } from "./transcribe";
+import { multipart, transcribe, TranscriptionError, transcriptionFailureStatus } from "./transcribe";
 
 describe("multipart", () => {
   test("does not drain the audio ahead of downstream demand", async () => {
@@ -47,6 +47,13 @@ describe("multipart", () => {
     await multipart("m", audio, 1).body.cancel("done");
 
     expect(cancelled).toBe(true);
+  });
+});
+
+describe("transcription HTTP status", () => {
+  test("only retryable failures become 5xx responses", () => {
+    expect(transcriptionFailureStatus(new TranscriptionError("temporary", true))).toBe(502);
+    expect(transcriptionFailureStatus(new TranscriptionError("permanent", false))).toBe(422);
   });
 });
 

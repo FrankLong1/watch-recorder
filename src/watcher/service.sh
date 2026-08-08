@@ -34,6 +34,18 @@ process_matches() {
   [[ "${command_line}" == *"${ROOT}/service.sh"* && "${command_line}" == *" supervise"* ]]
 }
 
+watcher_process_matches() {
+  local pid="$1" command_line
+  [[ "${pid}" =~ ^[0-9]+$ ]] || return 1
+  kill -0 "${pid}" 2>/dev/null || return 1
+  if [[ -r "/proc/${pid}/cmdline" ]]; then
+    command_line="$(tr '\0' ' ' <"/proc/${pid}/cmdline")"
+  else
+    command_line="$(ps -o command= -p "${pid}" 2>/dev/null || true)"
+  fi
+  [[ "${command_line}" == *"${ROOT}/wristmemo-watcher.ts watch"* ]]
+}
+
 current_pid() {
   [[ -f "${PID_FILE}" ]] || return 1
   local pid
@@ -57,6 +69,21 @@ prepare_state() {
   chmod 600 "${LOG_FILE}"
 }
 
+validate_config() {
+  [[ -f "${ROOT}/watcher.env" && ! -L "${ROOT}/watcher.env" ]] || {
+    echo "Missing regular private watcher configuration: ${ROOT}/watcher.env" >&2
+    return 74
+  }
+  [[ "$(stat -c '%u' "${ROOT}/watcher.env")" == "$(id -u)" ]] || {
+    echo "Refusing to start: watcher.env must be owned by the watcher user." >&2
+    return 74
+  }
+  [[ "$(stat -c '%a' "${ROOT}/watcher.env")" == "600" ]] || {
+    echo "Refusing to start: watcher.env must have mode 600." >&2
+    return 74
+  }
+}
+
 write_startup_item() {
   local temporary
   mkdir -p "${STARTUP_DIR}"
@@ -77,6 +104,7 @@ write_startup_item() {
 
 start_service() {
   local pid
+  validate_config
   prepare_state
   if pid="$(current_pid)"; then
     echo "WristMemo watcher service is already running (supervisor pid ${pid})."
@@ -117,6 +145,7 @@ stop_service() {
 
 supervise() {
   local child_pid="" exit_code=0 stopping=0
+  validate_config
   prepare_state
   write_pid "${PID_FILE}" "$$"
   stop_child() {
@@ -155,7 +184,7 @@ supervise() {
 }
 
 show_status() {
-  local pid
+  local pid watcher_pid status_code=0
   if pid="$(current_pid)"; then
     echo "WristMemo watcher service is running (supervisor pid ${pid})."
   else
@@ -166,15 +195,27 @@ show_status() {
   echo "Startup item: ${STARTUP_ITEM}"
   echo "Log: ${LOG_FILE}"
   if [[ -f "${CHILD_PID_FILE}" ]]; then
-    echo "Watcher pid: $(<"${CHILD_PID_FILE}")"
+    watcher_pid="$(<"${CHILD_PID_FILE}")"
+    if watcher_process_matches "${watcher_pid}"; then
+      echo "Watcher pid: ${watcher_pid}"
+    else
+      echo "Watcher process is not healthy; recorded pid: ${watcher_pid}" >&2
+      status_code=1
+    fi
+  else
+    echo "Watcher process pid is missing." >&2
+    status_code=1
   fi
-  (
+  if ! (
     set -a
     # shellcheck disable=SC1091
     source "${ROOT}/watcher.env"
     set +a
     "${ROOT}/run.sh" --status
-  )
+  ); then
+    status_code=1
+  fi
+  return "${status_code}"
 }
 
 case "${ACTION}" in
@@ -183,14 +224,7 @@ case "${ACTION}" in
       echo "Run service installation inside the Linux Cloud Workstation." >&2
       exit 20
     }
-    [[ -f "${ROOT}/watcher.env" ]] || {
-      echo "Missing private watcher configuration: ${ROOT}/watcher.env" >&2
-      exit 74
-    }
-    [[ "$(stat -c '%a' "${ROOT}/watcher.env")" == "600" ]] || {
-      echo "Refusing to start: watcher.env must have mode 600." >&2
-      exit 74
-    }
+    validate_config
     write_startup_item
     start_service
     show_status

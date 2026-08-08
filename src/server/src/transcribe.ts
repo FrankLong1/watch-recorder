@@ -19,6 +19,12 @@ export class TranscriptionError extends Error {
   }
 }
 
+/// Keep retry semantics consistent across the provider boundary and the phone:
+/// only a retryable provider failure may become a 5xx response.
+export function transcriptionFailureStatus(error: Pick<TranscriptionError, "retryable">): 502 | 422 {
+  return error.retryable ? 502 : 422;
+}
+
 export interface TranscribeOptions {
   audio: ReadableStream<Uint8Array>;
   /// Byte length of `audio`, needed to compute the multipart Content-Length.

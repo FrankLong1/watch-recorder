@@ -24,21 +24,35 @@ struct RecordScreen: View {
     // one are not the same thing.
     private static let recordingColour = Color(red: 0.78, green: 0.10, blue: 0.12)
     private static let readyColour = Color(white: 0.13)
+    private static let completionColour = Color(red: 0.08, green: 0.48, blue: 0.22)
 
     var body: some View {
         Button(action: model.handleScreenTap) {
-            Text(status)
-                .font(.system(size: 21, weight: .bold, design: .rounded))
-                .foregroundStyle(model.isRecording ? .white : Color(white: 0.62))
-                .multilineTextAlignment(.center)
-                .minimumScaleFactor(0.6)
-                .padding(.horizontal, 10)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(model.isRecording ? Self.recordingColour : Self.readyColour)
+            Group {
+                if let receipt = model.completionReceipt {
+                    VStack(spacing: 5) {
+                        Text(receipt.title)
+                            .font(.system(size: 19, weight: .black, design: .rounded))
+                        Text(receipt.detail)
+                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                            .opacity(0.8)
+                    }
+                } else {
+                    Text(status)
+                        .font(.system(size: 21, weight: .bold, design: .rounded))
+                }
+            }
+            .foregroundStyle(foregroundColour)
+            .multilineTextAlignment(.center)
+            .minimumScaleFactor(0.6)
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(backgroundColour)
         }
         .buttonStyle(.plain)
         .ignoresSafeArea()
         .animation(.easeOut(duration: 0.12), value: model.isRecording)
+        .animation(.easeOut(duration: 0.12), value: model.completionReceipt)
         // Double Tap is a stop-only gesture. Disabling it while READY prevents
         // an incidental hand gesture from becoming a second start route.
         .handGestureShortcut(.primaryAction, isEnabled: model.canStopRecording)
@@ -47,7 +61,7 @@ struct RecordScreen: View {
         // The word on screen, exposed as the button's value rather than a
         // separate element: SwiftUI folds a button's label into one
         // accessibility node, so a `Text` inside it is not separately queryable.
-        .accessibilityValue(status)
+        .accessibilityValue(accessibilityStatus)
         .accessibilityHint(model.canStopRecording ? "Stops and saves the memo" : "Starts a memo")
     }
 
@@ -62,5 +76,18 @@ struct RecordScreen: View {
         case .paused: AccessibilityID.StatusText.paused
         case .idle, .starting: AccessibilityID.StatusText.ready
         }
+    }
+
+    private var accessibilityStatus: String {
+        model.completionReceipt.map { "\($0.title)\n\($0.detail)" } ?? status
+    }
+
+    private var backgroundColour: Color {
+        if model.completionReceipt != nil { return Self.completionColour }
+        return model.isRecording ? Self.recordingColour : Self.readyColour
+    }
+
+    private var foregroundColour: Color {
+        model.completionReceipt != nil || model.isRecording ? .white : Color(white: 0.62)
     }
 }

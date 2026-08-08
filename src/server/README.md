@@ -1,8 +1,9 @@
 # WristMemo ingest
 
-The cloud half of WristMemo. One endpoint: the phone POSTs a finished memo's
-audio, this streams it to OpenAI, stores the transcript in Postgres, and answers
-with a status code and no body.
+The cloud half of WristMemo. The phone POSTs a finished memo's audio; this
+streams it to OpenAI, stores the transcript in Postgres, and answers with a
+status code and no body. The authenticated owner can then read their transcript
+history through a separate, text-only endpoint.
 
 Design, diagrams and the decisions behind it are in
 [`docs/architecture/1_INGEST_ARCHITECTURE.md`](../../docs/architecture/1_INGEST_ARCHITECTURE.md).
@@ -13,13 +14,15 @@ The short version:
 
 - **Audio never rests in GCP.** It is streamed through to OpenAI and never
   written to a bucket, disk, or log. There is no GCS bucket in this design.
-- **The OpenAI key never leaves Cloud Run.** The phone holds a bearer token
-  instead, which is revocable and rate-limitable.
-- **One-way door.** The transcript does not go back to the phone. The response
-  carries only the status that drives the phone's retry queue.
+- **The OpenAI key never leaves Cloud Run.** The phone presents a short-lived
+  Google ID token for the WristMemo OAuth server client. Cloud Run verifies the
+  immutable Google subject before accepting audio.
+- **Separate capture and review paths.** The upload response remains status
+  only; the signed-in owner later pulls their text-only transcript history into
+  the phone's protected local cache. Audio never comes back from Cloud Run.
 - **Watcher feed.** The remote Codex wiring watcher reads only memo UUIDs and
-  transcription timestamps through a separate bearer token; it never receives
-  audio or transcript text.
+  transcription timestamps using its attached Google service-account identity;
+  it never receives audio or transcript text.
 - **It attaches to infrastructure that already exists** — a Cloud SQL instance
   owned by a separate, private project. This configuration reads that instance
   through a data source and never manages it.
@@ -28,11 +31,14 @@ The short version:
 
 ```
 src/
+  auth.ts         Authorization-header parsing
+  google-identity.ts Google signature, audience and principal verification
   index.ts        the endpoint: auth, dedupe, transcribe, store
   transcribe.ts   hand-built streaming multipart to OpenAI
   db.ts           Cloud SQL over the /cloudsql socket, IAM auth
   routing.ts      spoken routing prefix (IDEAS.md §2)
   config.ts       environment parsing, fails fast at boot
+  watcher-feed.ts metadata-only watcher endpoint and cursor validation
 migrations/       ordered SQL, checksum-guarded by scripts/migrate.sh
 terraform/        database, identity, secrets, image repo, Cloud Run service
 ```
@@ -41,7 +47,7 @@ terraform/        database, identity, secrets, image repo, Cloud Run service
 
 ```
 POST /v1/memos/{id}
-  Authorization: Bearer <ingest token>
+  Authorization: Bearer <Google user ID token>
   Content-Type: audio/mp4
   X-Recorded-At: <unix seconds>
   X-Duration: <seconds>
@@ -49,7 +55,8 @@ POST /v1/memos/{id}
 
   → 204  committed, or already committed (idempotent)
   → 400  bad uuid or missing/invalid metadata headers
-  → 401  bad token
+  → 401  missing, expired, or invalid Google token
+  → 403  valid Google identity not on the subject allowlist
   → 411  no Content-Length
   → 413  over MAX_AUDIO_BYTES (25 MB, OpenAI's limit)
   → 502  OpenAI failed — retry
@@ -58,13 +65,27 @@ POST /v1/memos/{id}
 
 ```
 GET /v1/watcher/memos?after=<ISO timestamp>&after_id=<uuid>&limit=<1..500>
-  Authorization: Bearer <watcher token>
+  Authorization: Bearer <Google service-account ID token>
 
   → { "memos": [{ "id": "…", "transcribedAt": "…" }] }
 ```
 
 The watcher feed contains only memo identity and completion time. It does not
 return audio, transcript, route, or other derived content.
+
+```
+GET /v1/memos?after=<ISO timestamp>&after_id=<uuid>&limit=<1..200>
+  Authorization: Bearer <Google user ID token>
+
+  → { "memos": [{ "id": "…", "recordedAt": 1754667100.25,
+                    "durationSeconds": 12.4, "transcript": "…",
+                    "transcribedAt": "…" }] }
+```
+
+The history endpoint is read-only and filters every query by the authenticated
+Google subject-derived user ID. It is deliberately distinct from the watcher
+feed: workstation agents receive metadata only, while the phone owner receives
+their own transcript text and never audio.
 
 **Raw body, not multipart.** A background `URLSession` on iOS can only upload
 *from a file*; with a raw body `uploadTask(with:fromFile:)` points straight at
@@ -103,7 +124,10 @@ INGEST_DATABASE_USER=wristmemo_local \
   ./scripts/migrate.sh
 
 DATABASE_URL="postgres://wristmemo_local:dev@localhost:55432/wristmemo" \
-WRISTMEMO_INGEST_TOKEN=testtoken OPENAI_API_KEY=... PORT=8787 \
+GOOGLE_OAUTH_CLIENT_ID=000000000000-example.apps.googleusercontent.com \
+GOOGLE_ALLOWED_USER_SUBJECTS=allowed-google-subject \
+GOOGLE_WATCHER_SERVICE_ACCOUNTS=WATCHER_SERVICE_ACCOUNT_EMAIL \
+OPENAI_API_KEY=... PORT=8787 \
   bun run src/index.ts
 ```
 
@@ -130,10 +154,9 @@ before there is anything to deploy.
 human account that will impersonate the migrator in step 3. `terraform plan`
 fails asking for it otherwise.
 
-The deployed workstation watcher uses the metadata-only HTTPS feed above. A
-separate, read-only Cloud SQL IAM database user remains provisioned for a future
-workstation configuration with private database egress; it is not used by the
-current watcher. Runtime setup lives in
+The deployed workstation watcher uses only the metadata-only HTTPS feed above.
+The retired direct-Cloud-SQL experiment is revoked by migration 0004 and the
+workstation receives no Cloud SQL IAM permissions. Runtime setup lives in
 [`../watcher/README.md`](../watcher/README.md).
 
 ```bash
@@ -144,16 +167,12 @@ terraform plan -var-file=terraform.tfvars -out=wristmemo.tfplan
 terraform apply wristmemo.tfplan
 ```
 
-**2. Bootstrap the secrets.** Values are set outside Terraform so they never
-enter state, a plan, or a log.
+**2. Bootstrap the OpenAI secret.** Its value is set outside Terraform so it
+never enters state, a plan, or a log. Google user and workload authentication
+uses signed, short-lived ID tokens and therefore needs no shared secret.
 
 ```bash
 printf %s "$OPENAI_KEY" | gcloud secrets versions add wristmemo-openai-api-key \
-  --project="$PROJECT_ID" --data-file=-
-
-# Generate the ingest token; the same value goes into the phone.
-openssl rand -base64 32 | tr -d '\n' | tee /dev/tty | \
-  gcloud secrets versions add wristmemo-ingest-token \
   --project="$PROJECT_ID" --data-file=-
 ```
 
@@ -174,11 +193,9 @@ cloud-sql-proxy --auto-iam-authn --port 55431 \
 Then, in another shell:
 
 ```bash
-cd ~/Projects/watch-recorder/server
+cd ~/Projects/watch-recorder/src/server
 DATABASE_URL="host=127.0.0.1 port=55431 dbname=wristmemo user=wristmemo-migrator@$PROJECT_ID.iam sslmode=disable" \
 INGEST_DATABASE_USER="wristmemo-ingest@$PROJECT_ID.iam" \
-WATCHER_DATABASE_USER="your-workstation-runtime@$PROJECT_ID.iam" \
-WATCHER_OPERATOR_DATABASE_USER="you@example.com" \
   ./scripts/migrate.sh
 ```
 
@@ -195,24 +212,28 @@ gcloud builds submit --project="$PROJECT_ID" --config=cloudbuild.yaml \
 Resolve the resulting digest, put it in `terraform.tfvars` as `image` (it must
 be `...@sha256:...`; Terraform rejects a mutable tag), then plan and apply again.
 
-**5. Point the phone at it.** Set both once in the Xcode scheme's environment;
-`IngestCredentials` persists them to the Keychain so later launches on device
-work without Xcode.
+**5. Configure Google Sign-In on the phone.** Create one Google OAuth Web client
+as the backend audience and one iOS client for the WristMemo bundle ID. Enable
+Google OAuth App Check for the iOS client with the Apple Team ID. Copy the
+ignored local config example and set the endpoint, both client IDs, and the
+reversed iOS client ID:
 
+```bash
+cp ../../src/swift_app/Config/Signing.local.xcconfig.example \
+   ../../src/swift_app/Config/Signing.local.xcconfig
 ```
-WRISTMEMO_INGEST_URL   = <terraform output service_url>
-WRISTMEMO_INGEST_TOKEN = <the token from step 2>
-```
 
-If the scheme is shared it is committed — unset the token there after the first
-launch rather than checking it in.
+The user signs in once on the phone. Google Sign-In stores and silently refreshes
+its own session; WristMemo does not persist a custom bearer credential. Missing
+or expired auth leaves memos pending and visible rather than dropping audio.
 
-## Status — deployed
+## Deployment status
 
-Live in `us-central1`. `terraform output service_url` prints
-the endpoint; it is deliberately not written down here. The service accepts
-unauthenticated requests at the platform layer — the bearer token is the whole
-gate — so the URL is the one thing worth not publishing in a public repo.
+Actual projects, regions, service URLs, database instances, OAuth client IDs and
+IAM identities belong only in ignored local configuration. The public endpoint
+is expected: application auth verifies Google's signature, issuer, exact OAuth
+audience, token expiry, and an explicit user-subject or service-account
+allowlist before handling a protected request.
 
 Verified locally against Postgres 16 in Docker with a stub OpenAI:
 

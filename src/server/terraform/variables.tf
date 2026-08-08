@@ -73,9 +73,9 @@ variable "ingest_service_account_id" {
 
 variable "watcher_service_account_email" {
   description = <<-EOT
-    Optional Cloud Workstation runtime service account allowed to discover
-    WristMemo transcripts. When set, Terraform creates its Cloud SQL IAM user
-    and grants only the IAM permissions needed by the local Auth Proxy.
+    Google service-account identity used by the remote watcher. It receives a
+    short-lived ID token from the metadata server; no service-account key or
+    shared watcher secret exists.
   EOT
   type        = string
   default     = ""
@@ -83,6 +83,42 @@ variable "watcher_service_account_email" {
   validation {
     condition     = var.watcher_service_account_email == "" || can(regex("^[^@[:space:]]+@[^@[:space:]]+[.]gserviceaccount[.]com$", var.watcher_service_account_email))
     error_message = "watcher_service_account_email must be a service account email or empty."
+  }
+}
+
+variable "google_watcher_service_accounts" {
+  description = "Additional Google service-account emails allowed to read the metadata-only watcher feed."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for email in var.google_watcher_service_accounts :
+      can(regex("^[^@[:space:]]+@[^@[:space:]]+[.]gserviceaccount[.]com$", email))
+    ])
+    error_message = "Every google_watcher_service_accounts entry must be a service-account email."
+  }
+}
+
+variable "google_oauth_client_id" {
+  description = "Google OAuth web/server client ID used as the exact ID-token audience."
+  type        = string
+  nullable    = false
+
+  validation {
+    condition     = can(regex("^[0-9]+-[A-Za-z0-9_-]+[.]apps[.]googleusercontent[.]com$", var.google_oauth_client_id))
+    error_message = "google_oauth_client_id must be a Google OAuth client ID."
+  }
+}
+
+variable "google_allowed_user_subjects" {
+  description = "Immutable Google OIDC subject identifiers allowed to upload memos."
+  type        = list(string)
+  nullable    = false
+
+  validation {
+    condition     = length(var.google_allowed_user_subjects) > 0 && alltrue([for subject in var.google_allowed_user_subjects : length(trimspace(subject)) > 0])
+    error_message = "google_allowed_user_subjects must contain at least one non-empty subject."
   }
 }
 
@@ -119,9 +155,9 @@ variable "openai_model" {
 }
 
 variable "user_id" {
-  description = "Value written to memos.user_id until real per-user auth exists."
+  description = "Deprecated and ignored. Retained temporarily so older private tfvars still load."
   type        = string
-  default     = "frank"
+  default     = "default-user"
 }
 
 variable "max_instances" {

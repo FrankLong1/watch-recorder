@@ -23,5 +23,8 @@ enum AccessibilityID {
         static let recording = "RECORDING"
         static let paused = "PAUSED"
         static let micOff = "MIC OFF\nALLOW IN SETTINGS"
+        static let messageReceived = "MESSAGE RECEIVED"
+        static let launchingBackgroundAgent = "Launching background agent…"
+        static let completionReceipt = "\(messageReceived)\n\(launchingBackgroundAgent)"
     }
 }

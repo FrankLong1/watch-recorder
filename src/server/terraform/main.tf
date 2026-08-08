@@ -1,8 +1,7 @@
 locals {
-  service_enabled       = var.image != ""
-  database_user         = trimsuffix(google_service_account.ingest.email, ".gserviceaccount.com")
-  watcher_enabled       = var.watcher_service_account_email != ""
-  watcher_database_user = trimsuffix(var.watcher_service_account_email, ".gserviceaccount.com")
+  service_enabled          = var.image != ""
+  database_user            = trimsuffix(google_service_account.ingest.email, ".gserviceaccount.com")
+  watcher_service_accounts = distinct(compact(concat(var.google_watcher_service_accounts, [var.watcher_service_account_email])))
 }
 
 # The instance belongs to a separate, private Terraform configuration. Reading it
@@ -106,37 +105,6 @@ resource "google_sql_user" "ingest" {
   deletion_policy = "ABANDON"
 }
 
-# The Cloud Workstation owns the watcher process, so it receives its own
-# database identity. SQL privileges are deliberately granted by migration 0002
-# rather than here: Terraform must not own objects inside the application schema.
-resource "google_project_iam_member" "watcher_cloudsql_client" {
-  count = local.watcher_enabled ? 1 : 0
-
-  project = var.project_id
-  role    = "roles/cloudsql.client"
-  member  = "serviceAccount:${var.watcher_service_account_email}"
-}
-
-resource "google_project_iam_member" "watcher_cloudsql_instance_user" {
-  count = local.watcher_enabled ? 1 : 0
-
-  project = var.project_id
-  role    = "roles/cloudsql.instanceUser"
-  member  = "serviceAccount:${var.watcher_service_account_email}"
-}
-
-resource "google_sql_user" "watcher" {
-  count = local.watcher_enabled ? 1 : 0
-
-  project  = var.project_id
-  instance = data.google_sql_database_instance.shared.name
-  name     = local.watcher_database_user
-  type     = "CLOUD_IAM_SERVICE_ACCOUNT"
-
-  deletion_policy = "ABANDON"
-}
-
-
 # --- Secrets ------------------------------------------------------------------
 
 # Containers only. Values are set outside Terraform so they never enter state,
@@ -153,6 +121,10 @@ resource "google_secret_manager_secret" "openai_api_key" {
   depends_on          = [google_project_service.required]
 }
 
+# Retained inertly during the Google-auth rollout because deletion protection is
+# enabled on the existing live secret. No runtime identity can read it and no
+# application code accepts it. It can be removed in a separately reviewed
+# cleanup after its historical versions are disabled.
 resource "google_secret_manager_secret" "ingest_token" {
   project   = var.project_id
   secret_id = "${var.name_prefix}-ingest-token"
@@ -165,8 +137,8 @@ resource "google_secret_manager_secret" "ingest_token" {
   depends_on          = [google_project_service.required]
 }
 
-# Read-only token for the remote workstation's metadata feed. It is deliberately
-# separate from the phone ingest token so a leaked watcher can never upload audio.
+# Also retained inertly for the same non-destructive migration. The watcher now
+# obtains a short-lived Google service-account ID token from its metadata server.
 resource "google_secret_manager_secret" "watcher_token" {
   project   = var.project_id
   secret_id = "${var.name_prefix}-watcher-token"
@@ -181,9 +153,7 @@ resource "google_secret_manager_secret" "watcher_token" {
 
 resource "google_secret_manager_secret_iam_member" "ingest_secrets" {
   for_each = {
-    openai  = google_secret_manager_secret.openai_api_key.secret_id
-    token   = google_secret_manager_secret.ingest_token.secret_id
-    watcher = google_secret_manager_secret.watcher_token.secret_id
+    openai = google_secret_manager_secret.openai_api_key.secret_id
   }
 
   project   = var.project_id
@@ -213,9 +183,10 @@ resource "google_cloud_run_v2_service" "ingest" {
   name     = var.service_name
   location = var.region
 
-  # Called by a background daemon on a phone, so IAP is not usable here — it
-  # expects an interactive Google sign-in. Authentication is the bearer token
-  # checked in the application.
+  # Google Sign-In issues an OIDC ID token to the phone, but that token is for
+  # this app's OAuth client rather than Cloud Run IAM. The platform endpoint is
+  # therefore reachable while the application verifies issuer, audience and
+  # the exact allowlisted Google subject before reading any audio bytes.
   ingress             = "INGRESS_TRAFFIC_ALL"
   deletion_protection = false
 
@@ -290,32 +261,22 @@ resource "google_cloud_run_v2_service" "ingest" {
         value = var.openai_model
       }
       env {
-        name  = "WRISTMEMO_USER_ID"
-        value = var.user_id
+        name  = "GOOGLE_OAUTH_CLIENT_ID"
+        value = var.google_oauth_client_id
+      }
+      env {
+        name  = "GOOGLE_ALLOWED_USER_SUBJECTS"
+        value = join(",", var.google_allowed_user_subjects)
+      }
+      env {
+        name  = "GOOGLE_WATCHER_SERVICE_ACCOUNTS"
+        value = join(",", local.watcher_service_accounts)
       }
       env {
         name = "OPENAI_API_KEY"
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.openai_api_key.secret_id
-            version = "latest"
-          }
-        }
-      }
-      env {
-        name = "WRISTMEMO_INGEST_TOKEN"
-        value_source {
-          secret_key_ref {
-            secret  = google_secret_manager_secret.ingest_token.secret_id
-            version = "latest"
-          }
-        }
-      }
-      env {
-        name = "WRISTMEMO_WATCHER_TOKEN"
-        value_source {
-          secret_key_ref {
-            secret  = google_secret_manager_secret.watcher_token.secret_id
             version = "latest"
           }
         }
@@ -328,6 +289,10 @@ resource "google_cloud_run_v2_service" "ingest" {
       condition     = can(regex("@sha256:[0-9a-f]{64}$", var.image))
       error_message = "image must use an immutable sha256 digest."
     }
+    precondition {
+      condition     = length(local.watcher_service_accounts) > 0
+      error_message = "At least one Google watcher service account must be configured."
+    }
   }
 
   depends_on = [
@@ -339,8 +304,8 @@ resource "google_cloud_run_v2_service" "ingest" {
   ]
 }
 
-# The phone authenticates with the bearer token, not with Google IAM, so the
-# service must accept unauthenticated requests at the platform layer.
+# The phone's Google ID token is verified inside the application because its
+# audience is the app's OAuth server client, not Cloud Run IAM's service URL.
 resource "google_cloud_run_v2_service_iam_member" "public" {
   count = local.service_enabled ? 1 : 0
 

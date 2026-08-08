@@ -33,9 +33,11 @@ received.
 3. The screen stays grey until the recorder is actually writing; then it turns
    red and emits the one **START** haptic. That means “speak now.”
 4. Double Tap, a screen tap, an 8-second wrist-down timeout, or exiting the app
-   stops it. The screen is grey again immediately — compression, the transfer
-   to the phone and the upload all happen behind it, so the next thought never
-   waits on the last one. The same **STOP** haptic plays for every end path.
+   stops it. At that same STOP haptic, the screen briefly turns green with
+   **MESSAGE RECEIVED / Launching background agent…**; it is a local-capture
+   receipt, not a claim that a network hop has completed. The recorder is
+   already idle beneath it, so a new press starts immediately. Compression,
+   phone transfer, transcription and downstream work all remain behind it.
 5. Each device deletes its copy of the audio 24 h after the next hop has taken
    it, and never before. See [Design](docs/product/DESIGN.md#Memos-delete-themselves).
 
@@ -44,6 +46,10 @@ rationale: [Design](docs/product/DESIGN.md). The full friction budget — from
 press-to-recording through later review — is [Latency](docs/operations/LATENCY.md).
 What Apple does not allow: [Limitations](docs/operations/LIMITATIONS.md). Source
 and camera context brainstorming: [Source context](docs/product/SOURCE_CONTEXT.md).
+For company-issued Watch/iPhone deployments, the proposed zero-trust device,
+MDM, and service model is [Secure enterprise deployment](docs/operations/SECURE_ENTERPRISE_DEPLOYMENT.md). The IT-facing
+[Jamf Pro implementation brief](docs/operations/JAMF_PRO_IMPLEMENTATION_BRIEF.md) provides the
+concrete deployment scope, runbook, and acceptance tests.
 
 ## Assigning it to the Action button
 
@@ -70,8 +76,10 @@ in WristMemo" or add the Shortcuts action.
 open src/swift_app/WristMemo.xcodeproj
 ```
 
-Signing is already configured (Team `44X645LJ6H`); run the
-**WristMemo Watch App** scheme.
+Unsigned simulator builds work with the public defaults. For a signed device
+build, copy `src/swift_app/Config/Signing.local.xcconfig.example` to
+`Signing.local.xcconfig` and set your Apple team and bundle prefix there. The
+local file is gitignored.
 
 Command line, without signing:
 
@@ -84,7 +92,7 @@ xcodebuild -project src/swift_app/WristMemo.xcodeproj -target "WristMemo Watch A
 
 | Target | Platform | Role |
 |---|---|---|
-| `WristMemo` | iOS 26 | Companion — receives, lists and plays synced memos |
+| `WristMemo` | iOS 26 | Companion — receives memos, shows searchable transcript history, and plays recent source audio |
 | `WristMemo Watch App` | watchOS 26 | Recording app |
 | `WristMemoControls` | watchOS 26 | Control extension (the Action button entry point) |
 | `WristMemoTests` | watchOS 26 | Swift Testing — storage, retention, formatting, launch latch |
@@ -92,8 +100,9 @@ xcodebuild -project src/swift_app/WristMemo.xcodeproj -target "WristMemo Watch A
 
 ### Signing
 
-Bundle identifiers are `com.franklong.wristmemo*` and signing uses Team
-`44X645LJ6H`. Change both if you are building under a different account.
+The tracked project uses the neutral `com.example.wristmemo` prefix and no
+development team. `Config/Signing.local.xcconfig` supplies machine-specific
+values without changing the public project file.
 
 ## Testing
 
@@ -107,6 +116,7 @@ test bundles, then drives the app and asserts on the real container and log.
 ./scripts/sim.sh --watch         # re-run on save
 ./scripts/sim.sh --repeat 20     # run N times; surfaces launch-path races
 ./scripts/sim.sh --help          # every flag
+./scripts/check-public.sh        # reject secrets and machine-specific values
 ```
 
 Scenarios cover a record→save round trip, the pre-armed capture, crash recovery
@@ -115,11 +125,18 @@ is not device latency — see [the friction budget](docs/operations/LATENCY.md).
 
 ## Verifying on hardware
 
-See [DEVICE_TESTING.md](docs/operations/DEVICE_TESTING.md) — it covers the Mac setup that is
-already done, the Developer Mode / pairing steps that need your hardware, and
-what remains unverified. `scripts/run.sh` builds and installs through the paired
-iPhone by default; `scripts/run.sh --watch` uses the faster direct Watch path
-when its Wi-Fi tunnel is healthy. `scripts/sim.sh` is its simulator counterpart.
+The normal path is deliberately just two commands:
+
+```bash
+./scripts/run.sh --doctor
+./scripts/run.sh
+```
+
+The first reports the real device state; the second builds and installs through
+the one connected iPhone. See [DEVICE_TESTING.md](docs/operations/DEVICE_TESTING.md)
+for the one-time Watch steps and hardware checklist. `scripts/run.sh --watch`
+is only the optional faster path when the direct Watch tunnel is healthy.
+`scripts/sim.sh` is the simulator counterpart.
 
 ## Layout
 

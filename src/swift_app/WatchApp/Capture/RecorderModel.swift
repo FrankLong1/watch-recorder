@@ -51,6 +51,21 @@ final class RecorderModel {
         case undetermined, granted, denied
     }
 
+    /// A deliberately short, deterministic receipt for a finished capture.
+    ///
+    /// It says that WristMemo has received the spoken message — not that the
+    /// phone, transcription service, or downstream agent has already done its
+    /// work. Those hops remain asynchronous so the next thought never waits.
+    struct CompletionReceipt: Equatable {
+        let title: String
+        let detail: String
+
+        static let messageReceived = CompletionReceipt(
+            title: AccessibilityID.StatusText.messageReceived,
+            detail: AccessibilityID.StatusText.launchingBackgroundAgent
+        )
+    }
+
     // MARK: - Observable state
 
     /// Returning to idle re-arms the next recorder. Attached to the transition
@@ -69,6 +84,10 @@ final class RecorderModel {
     /// user may already have started the next memo, and an error that seizes
     /// the screen would take the microphone with it.
     private(set) var notice: String?
+
+    /// The green end-of-capture receipt. This is visual feedback only, not a
+    /// recording phase: the model is already idle and can start another memo.
+    private(set) var completionReceipt: CompletionReceipt?
 
     /// Red on the screen, and the only state that means audio is being written.
     var isRecording: Bool { phase == .recording }
@@ -121,11 +140,15 @@ final class RecorderModel {
     /// phase-based guard would reject the very task `init` queues.
     private var startInFlight = false
     private var noticeTask: Task<Void, Never>?
+    private var completionReceiptTask: Task<Void, Never>?
     private var wristDownStopTask: Task<Void, Never>?
     private var isWristDown = false
 
     /// Long enough to read a single word on a wrist that has just come up.
     private static let noticeDuration: Duration = .seconds(3)
+    /// A confirmation should feel immediate but never make the next capture
+    /// wait. A tap or Action-button press clears it sooner.
+    private static let completionReceiptDuration: Duration = .milliseconds(1_250)
     /// A brief grace period makes lowering the wrist a deliberate stop without
     /// ending a memo when the user merely glances away.
     private static let wristDownStopDelay: Duration = .seconds(8)
@@ -307,7 +330,7 @@ final class RecorderModel {
         autoStopRemaining = nil
         silence.reset()
         lastTick = nil
-        clearNotice()
+        clearMessages()
 
         let capture: (id: UUID, url: URL)
         if let armedCapture {
@@ -376,8 +399,6 @@ final class RecorderModel {
         cancelWristDownStop()
         stopTicker()
         autoStopRemaining = nil
-        Haptics.recordingStopped()
-
         let url = engine.stop()
         let id = currentID
         let startedAt = recordedAt
@@ -385,6 +406,14 @@ final class RecorderModel {
         recordedAt = nil
         elapsed = 0
         phase = .idle
+
+        // `engine.stop()` has synchronously ended the writer. Present the
+        // receipt and the one STOP haptic in the same main-actor turn, while
+        // `phase == .idle` re-arms the next capture underneath this screen.
+        if url != nil, id != nil {
+            post(completionReceipt: .messageReceived)
+        }
+        Haptics.recordingStopped()
 
         guard let url, let id else { return }
         Task { await commit(captureURL: url, id: id, recordedAt: startedAt, failureNotice: "TOO SHORT") }
@@ -418,6 +447,9 @@ final class RecorderModel {
             log.error("Suppressed notice while recording: \(notice, privacy: .public)")
             return
         }
+        completionReceiptTask?.cancel()
+        completionReceiptTask = nil
+        completionReceipt = nil
         self.notice = notice
         noticeTask?.cancel()
         noticeTask = Task { [weak self] in
@@ -427,10 +459,29 @@ final class RecorderModel {
         }
     }
 
-    private func clearNotice() {
+    private func post(completionReceipt: CompletionReceipt) {
+        // The completion receipt is intentionally eligible only after the mic
+        // has stopped. A new recording owns the screen as soon as it starts.
+        guard phase == .idle else { return }
         noticeTask?.cancel()
         noticeTask = nil
         notice = nil
+        self.completionReceipt = completionReceipt
+        completionReceiptTask?.cancel()
+        completionReceiptTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.completionReceiptDuration)
+            guard !Task.isCancelled else { return }
+            self?.completionReceipt = nil
+        }
+    }
+
+    private func clearMessages() {
+        noticeTask?.cancel()
+        noticeTask = nil
+        notice = nil
+        completionReceiptTask?.cancel()
+        completionReceiptTask = nil
+        completionReceipt = nil
     }
 
     private func scheduleDebugAutoStop() {

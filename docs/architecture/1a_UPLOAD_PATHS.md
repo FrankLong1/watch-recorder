@@ -36,7 +36,7 @@ flowchart LR
     end
 
     WD ==>|"① transferFile<br/>audio + id, createdAt, duration"| RX
-    UP ==>|"② POST /v1/memos/{id}<br/>raw audio + Bearer token"| CR
+    UP ==>|"② POST /v1/memos/{id}<br/>raw audio + Google ID token"| CR
     CR -.->|"③ 204, no body"| UP
 
     style WD fill:#1a5c7f,stroke:#0d3a52,color:#fff
@@ -96,8 +96,8 @@ stateDiagram-v2
     [*] --> pending: arrives from watch
     pending --> uploading: network available
     uploading --> uploaded: exact 204 receipt
-    uploading --> pending: 5xx / timeout / offline
-    uploading --> failed: 4xx
+    uploading --> pending: 401 refresh / 5xx / timeout / offline
+    uploading --> failed: 403 / permanent 4xx
     failed --> pending: phone-side Retry action
     uploaded --> [*]: deleted 24 h later
 
@@ -110,7 +110,7 @@ stateDiagram-v2
     end note
 
     note right of failed
-        4xx is not retried:
+        permanent 4xx is not retried:
         the same bytes would
         fail identically
     end note
@@ -129,34 +129,36 @@ idempotent on the memo's UUID.
 flowchart TD
     M["memo on watch"] --> S1{"phone ever<br/>in range?"}
     S1 -->|"no"| K1["🔴 waits on the wrist<br/>indefinitely"]
-    S1 -->|"yes"| S2{"credentials<br/>configured?"}
-    S2 -->|"no"| K2["🔴 silently disabled<br/><i>← true right now</i>"]
-    S2 -->|"yes"| S3{"upload result"}
-    S3 -->|"4xx"| K3["🟠 failed, never retried"]
+    S1 -->|"yes"| S2{"Google session<br/>available?"}
+    S2 -->|"no"| K2["🟠 stays pending<br/>Sign in shown on phone"]
+    S2 -->|"yes"| S2A{"audio upload<br/>approved for account?"}
+    S2A -->|"no"| K2A["🟠 stays pending<br/>counted approval shown"]
+    S2A -->|"yes"| S3{"upload result"}
+    S3 -->|"permanent 4xx"| K3["🟠 failed, never retried"]
     S3 -->|"204"| OK["🟢 row in Postgres"]
 
     style K1 fill:#8b1a1a,stroke:#5a0f0f,color:#fff
     style K2 fill:#8b1a1a,stroke:#5a0f0f,color:#fff
+    style K2A fill:#7f6a1a,stroke:#4a3d0d,color:#fff
     style K3 fill:#7f6a1a,stroke:#4a3d0d,color:#fff
     style OK fill:#1a7f37,stroke:#0d4a20,color:#fff
 ```
 
 **Nothing is ever lost** — every one of these states is one the retention sweep
 refuses to delete, so a stuck memo keeps its audio for as long as it is stuck.
-But all three failure paths are *invisible*, because stage 1 is a one-way door
-with no upload UI.
-
-On real hardware the app is still sitting in the second red box —
-`IngestCredentials.current` is `nil` until the scheme supplies it, so uploads
-are disabled with one log line and no memo is ever sent. `./cloud.sh` supplies
-credentials itself, which is why the simulator path is green while the device
-path has never run.
+Delivery failures are visible in the phone library without putting any choice
+on the watch capture path. If the Google session is absent or expired, audio
+stays pending and the phone offers Sign in with Google. Sign-in unlocks identity
+and transcript history only. The phone then shows the exact pending count and
+requires explicit approval before it schedules the backlog; that approval is
+persisted for the exact immutable Google account, and sign-out revokes it.
 
 ---
 
 ## Testing leg ② without a watch
 
-`./cloud.sh --db` runs the whole upload leg against the real service:
+`./cloud.sh --db` can run the upload leg against the real service before App
+Check enforcement, or with Google's separately configured debug provider:
 
 ```
 ✓ service reachable
@@ -169,21 +171,19 @@ green
 
 It plants a memo directly into the phone app's container exactly as
 `session(_:didReceive:)` would have left it, so **no watch, no pair and no
-WatchConnectivity are involved**. Credentials reach the app through
-`SIMCTL_CHILD_*`, which means no token is ever written into the Xcode scheme —
-that file is committed.
+WatchConnectivity are involved**. The user completes Google Sign-In in the
+simulator when prompted; the harness never injects or stores an auth token.
 
-**What it does not prove:** the simulator has no background transfer daemon, so
-`TranscriptionClient` falls back to a default `URLSession` there. The request,
-auth, retry policy and state machine are all exercised; that an upload *survives
-the app being suspended* can only be shown on hardware.
+**What it does not prove:** the simulator has no background transfer daemon or
+production App Attest identity, so the enforced production authentication and
+an upload that *survives the app being suspended* can only be shown on hardware.
 
 ## What is left
 
-1. **Run it on hardware.** Set `WRISTMEMO_INGEST_URL` and
-   `WRISTMEMO_INGEST_TOKEN` in the Xcode scheme's environment for one launch;
-   `IngestCredentials` persists them to the Keychain so later on-device launches
-   work without Xcode. Then record a memo on the watch and confirm the row.
+1. **Run it on hardware.** Put the endpoint plus iOS/server OAuth client IDs in
+   ignored `Config/Signing.local.xcconfig`, install the signed app, complete
+   Sign in with Google, and explicitly enable transcription. Then record a memo
+   on the watch and confirm the row.
    This is the only remaining untested thing: leg ① from real hardware, and the
    background session doing what the simulator cannot.
 
@@ -193,7 +193,7 @@ the app being suspended* can only be shown on hardware.
 
 It is possible — watchOS has full `URLSession` and the watch has WiFi, LTE on
 cellular models. It was rejected because `transferFile` is free and already
-durable, the watch would need the token, and radio use on the wrist is the most
+durable, the watch would need its own user identity, and radio use on the wrist is the most
 expensive thing in this design. The one case it wins is a phone left at home,
 which is the first red box above.
 

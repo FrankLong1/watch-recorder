@@ -1,8 +1,16 @@
-# Secrets. Never commit these — the OpenAI key and the ingest token are the two
-# things in this project that cannot be rotated silently.
+# Secrets. Never commit these — leaked service and device tokens cannot be
+# rotated silently across every installed client.
 .env
 .env.*
 !.env.example
+src/watcher/watcher.env
+.private-patterns
+
+# Workstation watcher runtime state. The ledger contains only metadata, but it
+# belongs to the deployed service rather than source control.
+src/watcher/state.json
+src/watcher/.watcher.lock
+src/watcher/service/
 
 # Xcode
 build/
@@ -10,7 +18,11 @@ DerivedData/
 *.xcuserstate
 xcuserdata/
 *.xcworkspace/xcuserdata/
+src/swift_app/Config/Signing.local.xcconfig
 .DS_Store
+
+# Machine-specific operational notes.
+docs/operations/*.local.md
 
 # Swift
 .swiftpm/

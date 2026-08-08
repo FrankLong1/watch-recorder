@@ -27,7 +27,7 @@ substitute for the same in-process request path.
   data container: `Library/Application Support/WristMemo/{Captures,Memos}` and
   `memos.json`.
 - `src/swift_app/WatchApp/Diagnostics/Latency.swift` writes an OS-log notice in the stable
-  `com.franklong.wristmemo` subsystem; the important marker is
+  configured bundle-prefix subsystem; the important marker is
   `[latency] first sample at <N>ms`.
 - The existing `DEVICE_TESTING.md` has manually verified the exact simulator
   install, microphone permission, launch, and log commands that the harness
@@ -80,7 +80,7 @@ same small Python approach used by `run.sh`, rather than brittle table parsing.
    `-destination "platform=watchOS Simulator,id=$SIM"`, keeping derived data
    under ignored `build/simdd`.
 2. Resolve `WristMemo Watch App.app`, install it with `simctl install`, and run
-   `simctl privacy "$SIM" grant microphone com.franklong.wristmemo.watchkitapp`.
+   `simctl privacy "$SIM" grant microphone "$WRISTMEMO_WATCH_BUNDLE_ID"`.
    Make microphone permission a documented prerequisite because the watch
    simulator records through the Mac microphone.
 3. Resolve the data container after install with
@@ -92,7 +92,7 @@ same small Python approach used by `run.sh`, rather than brittle table parsing.
 
    ```bash
    xcrun simctl spawn "$SIM" log stream --style compact \
-     --predicate 'subsystem == "com.franklong.wristmemo"'
+     --predicate "subsystem == \"$WRISTMEMO_LOGGING_SUBSYSTEM\""
    ```
 
    Capture it in a scenario-specific temporary file and clean it with a trap.

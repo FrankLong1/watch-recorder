@@ -32,6 +32,32 @@ final class PhoneLibrary: NSObject {
         }
     }
 
+    /// A durable, readable transcript. The UUID is the watch-generated
+    /// identity, so a transcript and its temporary local audio can always be
+    /// reunited without inventing a second identifier.
+    struct Transcript: Codable, Identifiable, Equatable {
+        let id: UUID
+        let recordedAt: Date
+        let duration: TimeInterval
+        let text: String
+        /// Kept losslessly for the server cursor; the phone never displays it.
+        let transcribedAt: String
+    }
+
+    /// One chronological item for the iPhone review surface. A source audio
+    /// file is optional because it is intentionally retained for only one day
+    /// after verified transcription, while the transcript remains available.
+    struct ReviewItem: Identifiable, Equatable {
+        let id: UUID
+        let recordedAt: Date
+        let duration: TimeInterval
+        let transcript: Transcript?
+        let localMemo: Item?
+
+        var uploadState: UploadState { localMemo?.uploadState ?? .uploaded }
+        var hasSourceAudio: Bool { localMemo != nil }
+    }
+
     /// What the watch sends alongside the audio, written next to each file so
     /// the phone never has to open an AAC file just to learn its duration.
     private struct Sidecar: Codable {
@@ -43,12 +69,37 @@ final class PhoneLibrary: NSObject {
         var uploadedAt: Date?
     }
 
+    private struct TranscriptCursor: Codable, Equatable {
+        let transcribedAt: String
+        let id: UUID
+
+        static let beginning = TranscriptCursor(
+            transcribedAt: "1970-01-01T00:00:00.000000Z",
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+        )
+    }
+
+    private struct TranscriptCache: Codable {
+        let cursor: TranscriptCursor
+        let transcripts: [Transcript]
+    }
+
     private(set) var items: [Item] = []
+    private(set) var transcripts: [Transcript] = []
     private(set) var playingID: UUID?
+    private(set) var isSynchronizingTranscripts = false
+    /// True only after the currently signed-in Google account has separately
+    /// received explicit permission to upload audio. Sign-in alone is read-only.
+    private(set) var uploadsAreAuthorized = false
 
     private let log = SharedConfig.logger("PhoneLibrary")
     private var player: AVAudioPlayer?
     private let ingest = TranscriptionClient()
+    private let transcriptHistory = TranscriptHistoryClient()
+    private let uploadConsent = AudioUploadConsent()
+    private weak var authentication: GoogleAuthentication?
+    private var didStart = false
+    private var transcriptCursor = TranscriptCursor.beginning
 
     private nonisolated static let importLog = SharedConfig.logger("PhoneImport")
 
@@ -61,15 +112,38 @@ final class PhoneLibrary: NSObject {
         return url
     }()
 
-    func start(onBackgroundEventsFinished: @escaping () -> Void) {
+    /// Text is cached only inside this app's protected container so the review
+    /// library remains useful offline. It is not part of the Watch hand-off or
+    /// the audio transport path.
+    private nonisolated static let transcriptCacheURL: URL = {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let directory = base.appendingPathComponent("TranscriptLibrary", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory.appendingPathComponent("transcripts.json")
+    }()
+
+    func start(
+        authentication: GoogleAuthentication,
+        onBackgroundEventsFinished: @escaping () -> Void
+    ) {
+        guard !didStart else { return }
+        didStart = true
+        self.authentication = authentication
+        refreshUploadAuthorization()
         reload()
+        loadTranscriptCache()
         recoverLegacyRawMemos()
         // Every launch is a chance to sweep, which matters because the app can
         // sit suspended for days between one upload finishing and the next.
         purgeUploaded()
         // Started before the session so anything left over from a previous run
         // is retried even if the watch never becomes reachable again.
-        ingest.activate(library: self, onBackgroundEventsFinished: onBackgroundEventsFinished)
+        ingest.activate(
+            library: self,
+            authentication: authentication,
+            onBackgroundEventsFinished: onBackgroundEventsFinished
+        )
+        transcriptHistory.activate(library: self, authentication: authentication)
         guard WCSession.isSupported() else { return }
         WCSession.default.delegate = self
         WCSession.default.activate()
@@ -78,6 +152,88 @@ final class PhoneLibrary: NSObject {
             guard let self else { return }
             await self.normalizePendingCaptures()
             self.ingest.uploadPending()
+        }
+    }
+
+    func authenticationDidChange() {
+        refreshUploadAuthorization()
+        ingest.authenticationDidChange()
+        transcriptHistory.authenticationDidChange()
+    }
+
+    /// Called only from the phone's counted confirmation dialog. The durable
+    /// decision is tied to Google's immutable account ID, so signing into a
+    /// different account can never release this backlog silently.
+    func authorizeUploadsForCurrentAccount() {
+        guard uploadConsent.grant(accountID: authentication?.accountIdentifier) else {
+            log.error("Refusing upload authorization without a stable Google account")
+            return
+        }
+        authenticationDidChange()
+    }
+
+    /// Signing out removes upload permission as well as the Google session.
+    /// Existing background tasks are cancelled back to `pending`; audio stays
+    /// on the phone and can be approved again later.
+    func revokeUploadAuthorization() {
+        uploadConsent.revoke()
+        uploadsAreAuthorized = false
+        ingest.cancelActiveUploads()
+    }
+
+    var pendingUploadCount: Int {
+        items.count { $0.uploadState == .pending }
+    }
+
+    private func refreshUploadAuthorization() {
+        uploadsAreAuthorized = uploadConsent.allows(
+            accountID: authentication?.accountIdentifier
+        )
+    }
+
+    /// Pull-to-refresh and transcript completion both use this. It fetches all
+    /// pages after the durable cursor and is a no-op while signed out.
+    func refreshTranscriptHistory() async {
+        await transcriptHistory.refreshNow()
+    }
+
+    /// Called when an upload receives the exact ingest receipt. The watch and
+    /// audio queues do not wait on this read; it only makes the new transcript
+    /// appear as soon as the service has committed it.
+    func transcriptHistoryMayHaveChanged() {
+        transcriptHistory.refreshIfPossible()
+    }
+
+    var reviewItems: [ReviewItem] {
+        let localByID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
+        var result = transcripts.map { transcript in
+            ReviewItem(
+                id: transcript.id,
+                recordedAt: transcript.recordedAt,
+                duration: transcript.duration,
+                transcript: transcript,
+                localMemo: localByID[transcript.id]
+            )
+        }
+        let transcriptIDs = Set(transcripts.map(\.id))
+        result.append(contentsOf: items.compactMap { item in
+            guard !transcriptIDs.contains(item.id) else { return nil }
+            return ReviewItem(
+                id: item.id,
+                recordedAt: item.recordedAt,
+                duration: item.duration,
+                transcript: nil,
+                localMemo: item
+            )
+        })
+        return result.sorted { $0.recordedAt > $1.recordedAt }
+    }
+
+    func reviewItems(matching query: String) -> [ReviewItem] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return reviewItems }
+        return reviewItems.filter { item in
+            item.transcript?.text.localizedCaseInsensitiveContains(trimmed) == true
         }
     }
 
@@ -195,6 +351,60 @@ final class PhoneLibrary: NSObject {
             .write(to: Self.sidecarURL(for: item.url), options: .atomic)
     }
 
+    // MARK: - Transcript history
+
+    private func loadTranscriptCache() {
+        guard let data = try? Data(contentsOf: Self.transcriptCacheURL) else { return }
+        do {
+            let cache = try JSONDecoder().decode(TranscriptCache.self, from: data)
+            transcriptCursor = cache.cursor
+            transcripts = cache.transcripts.sorted { $0.recordedAt > $1.recordedAt }
+        } catch {
+            log.error("Couldn't read transcript cache: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private func persistTranscriptCache() {
+        do {
+            let cache = TranscriptCache(cursor: transcriptCursor, transcripts: transcripts)
+            let data = try JSONEncoder().encode(cache)
+            try data.write(to: Self.transcriptCacheURL, options: [.atomic, .completeFileProtection])
+        } catch {
+            // The server remains the durable source; a cache write failure must
+            // never interfere with recording, upload, or future read retries.
+            log.error("Couldn't save transcript cache: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    var nextTranscriptCursor: (transcribedAt: String, id: UUID) {
+        (transcriptCursor.transcribedAt, transcriptCursor.id)
+    }
+
+    func mergeTranscripts(_ incoming: [Transcript]) {
+        guard !incoming.isEmpty else { return }
+        var byID = Dictionary(uniqueKeysWithValues: transcripts.map { ($0.id, $0) })
+        for transcript in incoming {
+            byID[transcript.id] = transcript
+            advanceTranscriptCursor(with: transcript)
+        }
+        transcripts = byID.values.sorted { $0.recordedAt > $1.recordedAt }
+        persistTranscriptCache()
+    }
+
+    func setTranscriptSyncing(_ value: Bool) {
+        isSynchronizingTranscripts = value
+    }
+
+    private func advanceTranscriptCursor(with transcript: Transcript) {
+        let current = transcriptCursor
+        let isLater = transcript.transcribedAt > current.transcribedAt
+            || (transcript.transcribedAt == current.transcribedAt
+                && transcript.id.uuidString.localizedCaseInsensitiveCompare(current.id.uuidString) == .orderedDescending)
+        if isLater {
+            transcriptCursor = TranscriptCursor(transcribedAt: transcript.transcribedAt, id: transcript.id)
+        }
+    }
+
     /// The phone is the repair surface. Retrying here never touches audio; it
     /// only moves a terminal upload state back into the durable queue after a
     /// token, endpoint, or size issue has been corrected.
@@ -263,6 +473,11 @@ final class PhoneLibrary: NSObject {
         } catch {
             log.error("Playback failed: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    func play(_ item: ReviewItem) {
+        guard let localMemo = item.localMemo else { return }
+        play(localMemo)
     }
 
     func stop() {

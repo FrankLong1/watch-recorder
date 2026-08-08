@@ -5,55 +5,30 @@
 /// else. Audio is never written to disk, a bucket, or a log — see
 /// docs/architecture/1_INGEST_ARCHITECTURE.md.
 
-import { createHash, timingSafeEqual } from "node:crypto";
 import { Hono } from "hono";
 import { loadConfig } from "./config";
 import { createMemoStore, DatabaseUnavailableError, MemoInProgressError } from "./db";
+import {
+  databaseUserId,
+  GoogleIdentityVerifier,
+  isAllowedService,
+  isAllowedUser,
+} from "./google-identity";
 import { parseRoute } from "./routing";
-import { transcribe, TranscriptionError } from "./transcribe";
+import { transcribe, TranscriptionError, transcriptionFailureStatus } from "./transcribe";
+import { registerTranscriptFeed } from "./transcript-feed";
 import { isSupportedMemoUpload } from "./upload-format";
+import { registerWatcherFeed } from "./watcher-feed";
 
 const config = loadConfig();
 const store = createMemoStore(config.database);
+const identities = new GoogleIdentityVerifier();
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
-const MAX_WATCHER_PAGE_SIZE = 500;
 
 function log(message: string, fields: Record<string, string | number> = {}) {
   // Structured, and deliberately incapable of carrying audio or transcript text.
   console.log(JSON.stringify({ message, ...fields }));
-}
-
-/// Compares digests rather than the raw values so the comparison is
-/// length-independent as well as time-independent.
-function tokenMatches(presented: string, expected: string): boolean {
-  const a = createHash("sha256").update(presented).digest();
-  const b = createHash("sha256").update(expected).digest();
-  return timingSafeEqual(a, b);
-}
-
-function bearer(header: string | undefined): string | null {
-  if (!header) return null;
-  const [scheme, ...rest] = header.split(" ");
-  if (scheme?.toLowerCase() !== "bearer") return null;
-  const token = rest.join(" ").trim();
-  return token || null;
-}
-
-function watcherCursor(c: { req: { query(name: string): string | undefined } }): { transcribedAt: Date; id: string } | null {
-  const after = c.req.query("after") ?? "1970-01-01T00:00:00.000Z";
-  const transcribedAt = new Date(after);
-  const id = c.req.query("after_id") ?? ZERO_UUID;
-  if (!Number.isFinite(transcribedAt.getTime()) || !UUID.test(id)) return null;
-  return { transcribedAt, id };
-}
-
-function watcherLimit(raw: string | undefined): number | null {
-  if (!raw) return 100;
-  const value = Number(raw);
-  if (!Number.isSafeInteger(value) || value < 1 || value > MAX_WATCHER_PAGE_SIZE) return null;
-  return value;
 }
 
 const app = new Hono();
@@ -69,34 +44,38 @@ app.get("/readyz", async (c) => {
 
 // A metadata-only feed for the workstation watcher. It deliberately returns
 // neither audio nor transcript text, even though both exist upstream of here.
-app.get("/v1/watcher/memos", async (c) => {
-  const token = bearer(c.req.header("authorization"));
-  if (!token || !tokenMatches(token, config.watcherToken)) {
-    return c.json({ error: "unauthorized" }, 401);
-  }
-  const cursor = watcherCursor(c);
-  const limit = watcherLimit(c.req.query("limit"));
-  if (!cursor || !limit) return c.json({ error: "invalid cursor or limit" }, 400);
+registerWatcherFeed(app, {
+  store,
+  log,
+  authorize: async (authorization) => {
+    const principal = await identities.verifyAuthorization(authorization, config.googleOAuthClientId);
+    if (!principal) return "unauthorized";
+    return isAllowedService(principal, config.googleWatcherServiceAccounts) ? "authorized" : "forbidden";
+  },
+});
 
-  try {
-    const memos = await store.listTranscribedAfter(cursor, limit);
-    return c.json({
-      memos: memos.map((memo) => ({ id: memo.id, transcribedAt: memo.transcribedAt.toISOString() })),
-    });
-  } catch (error) {
-    if (error instanceof DatabaseUnavailableError) {
-      log("watcher feed database unavailable", { detail: error.message });
-      return c.json({ error: "database unavailable" }, 503);
-    }
-    log("watcher feed failed", { detail: error instanceof Error ? error.name : "unknown" });
-    return c.json({ error: "internal error" }, 500);
-  }
+// Unlike the watcher feed, this is the person's own review surface. It is
+// authenticated with the same short-lived Google ID token used for upload and
+// always filters the query by that user's immutable subject-derived identity.
+registerTranscriptFeed(app, {
+  store,
+  log,
+  authorize: async (authorization) => {
+    const principal = await identities.verifyAuthorization(authorization, config.googleOAuthClientId);
+    if (!principal) return "unauthorized";
+    if (!isAllowedUser(principal, config.googleAllowedUserSubjects)) return "forbidden";
+    return { userId: databaseUserId(principal) };
+  },
 });
 
 app.post("/v1/memos/:id", async (c) => {
-  const token = bearer(c.req.header("authorization"));
-  if (!token || !tokenMatches(token, config.ingestToken)) {
-    return c.json({ error: "unauthorized" }, 401);
+  const principal = await identities.verifyAuthorization(
+    c.req.header("authorization"),
+    config.googleOAuthClientId,
+  );
+  if (!principal) return c.json({ error: "unauthorized" }, 401);
+  if (!isAllowedUser(principal, config.googleAllowedUserSubjects)) {
+    return c.json({ error: "forbidden" }, 403);
   }
 
   const id = c.req.param("id");
@@ -156,7 +135,7 @@ app.post("/v1/memos/:id", async (c) => {
 
       await store.save({
         id,
-        userId: config.defaultUserId,
+        userId: databaseUserId(principal),
         recordedAt: new Date(recordedAtSeconds * 1000),
         durationSeconds,
         transcript: result.text,
@@ -182,12 +161,14 @@ app.post("/v1/memos/:id", async (c) => {
       });
     }
     if (error instanceof DatabaseUnavailableError) {
-      log("database unavailable", { id, detail: error.message });
+      log("database unavailable", { id });
       return c.json({ error: "database unavailable" }, 503);
     }
     if (error instanceof TranscriptionError) {
-      log("transcription failed", { id, detail: error.message });
-      return c.json({ error: "transcription failed" }, error.retryable ? 502 : 500);
+      log("transcription failed", { id, retryable: error.retryable ? 1 : 0 });
+      // A permanent upstream 4xx is a terminal client-visible failure. Returning
+      // 5xx here would make the phone resend the same audio forever.
+      return c.json({ error: "transcription failed" }, transcriptionFailureStatus(error));
     }
     log("unhandled error", { id, detail: error instanceof Error ? error.name : "unknown" });
     return c.json({ error: "internal error" }, 500);

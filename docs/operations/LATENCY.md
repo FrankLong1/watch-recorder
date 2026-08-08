@@ -317,9 +317,10 @@ Build these before elaborate intelligence:
 1. **A verified receipt per hop.** A watch-side `WCSession` completion is not
    proof that the phone imported the file; an HTTP 2xx with a captive-portal body
    is not proof that the server committed it. Model each hand-off distinctly.
-2. **Status-only reconciliation.** Compare watch/phone memo IDs to database
-   receipts and surface an age-based “needs attention” count. This preserves the
-   one-way *content* boundary while detecting missing thoughts.
+2. **Status reconciliation.** Compare watch/phone memo IDs to database
+   receipts and surface an age-based “needs attention” count. The authenticated
+   phone may read its own transcript history; the Watch's one-way content
+   boundary remains intact while missing thoughts become detectable.
 3. **A repair action.** Failed authentication, a too-large file, import failure,
    and a stalled queue need a retry path a human can actually reach.
 4. **Fault-injection coverage.** Treat captive portals, missing metadata,

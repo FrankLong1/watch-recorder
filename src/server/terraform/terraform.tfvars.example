@@ -1,7 +1,7 @@
 # Real values live in terraform.tfvars, which is gitignored. This repo is
 # public, so nothing here names actual infrastructure.
 project_id = "your-gcp-project-id"
-region     = "us-central1"
+region     = "your-gcp-region"
 
 # The existing Cloud SQL instance to attach to. This configuration reads it
 # through a data source and never manages it.
@@ -16,9 +16,15 @@ image = ""
 # Required — there is no default.
 operator_iam_user = "you@example.com"
 
-# Optional: the service account attached to the individual Cloud Workstation
-# that runs the watcher. The resulting database identity is read-only.
-watcher_service_account_email = ""
+# A Web application OAuth client used as the backend ID-token audience. The iOS
+# OAuth client sets this as its server client ID.
+google_oauth_client_id = "000000000000-example.apps.googleusercontent.com"
+
+# Use Google's immutable OpenID Connect `sub`, not an email address.
+google_allowed_user_subjects = ["your-google-subject"]
+
+# The workstation's attached service account obtains a short-lived ID token
+# from the Google metadata server. No downloaded key is needed.
+watcher_service_account_email = "WATCHER_SERVICE_ACCOUNT_EMAIL"
 
 openai_model = "gpt-4o-transcribe"
-user_id      = "frank"

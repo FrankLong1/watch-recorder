@@ -6,16 +6,17 @@
 /// here.
 
 import { spawn } from "node:child_process";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import readline from "node:readline";
 
 type RunStatus = "ignored" | "pending" | "started" | "succeeded" | "failed" | "interrupted";
 
-interface RunRecord {
+export interface RunRecord {
   status: RunStatus;
   discoveredAt: string;
   startedAt?: string;
+  threadRequestStartedAt?: string;
   completedAt?: string;
   attempts?: number;
   threadId?: string;
@@ -24,27 +25,38 @@ interface RunRecord {
   error?: string;
 }
 
-interface WatcherState {
+interface PollState {
+  lastAttemptAt?: string;
+  lastSucceededAt?: string;
+  lastFailedAt?: string;
+  consecutiveFailures: number;
+  nextAttemptAt?: string;
+  error?: string;
+}
+
+export interface WatcherState {
   version: 1;
   bootstrappedAt?: string;
   cursor?: MemoCursor;
+  poll?: PollState;
   memos: Record<string, RunRecord>;
 }
 
-interface MemoCursor {
+export interface MemoCursor {
   id: string;
   transcribedAt: string;
 }
 
 export interface Config {
   feedUrl: string;
-  feedToken: string;
+  googleAudience: string;
   pollMs: number;
   batchSize: number;
   root: string;
   codexBin: string;
   taskCwd: string;
   taskTimeoutMs: number;
+  feedTimeoutMs: number;
 }
 
 interface RpcMessage {
@@ -78,17 +90,45 @@ function required(name: string): string {
   return value;
 }
 
+export function validatedFeedUrl(raw: string): string {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error("WRISTMEMO_WATCHER_FEED_URL must be an absolute HTTPS URL");
+  }
+  if (url.protocol !== "https:" || !url.hostname || url.username || url.password || url.search || url.hash) {
+    throw new Error("WRISTMEMO_WATCHER_FEED_URL must be an absolute HTTPS URL without credentials, query, or fragment");
+  }
+  return url.toString().replace(/\/$/, "");
+}
+
+/// The app-server only needs process basics and its own local configuration.
+/// In particular, it must never inherit Google metadata or unrelated
+/// credentials that happened to exist in the watcher's service environment.
+export function codexChildEnvironment(source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const allowed = new Set([
+    "PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "TERM", "COLORTERM",
+    "LANG", "NO_COLOR", "CODEX_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME",
+    "SSL_CERT_FILE", "SSL_CERT_DIR", "__CF_USER_TEXT_ENCODING",
+  ]);
+  return Object.fromEntries(
+    Object.entries(source).filter(([key, value]) => value !== undefined && (allowed.has(key) || key.startsWith("LC_"))),
+  );
+}
+
 export function loadConfig(): Config {
   const home = process.env.HOME ?? ".";
   return {
-    feedUrl: required("WRISTMEMO_WATCHER_FEED_URL").replace(/\/$/, ""),
-    feedToken: required("WRISTMEMO_WATCHER_FEED_TOKEN"),
+    feedUrl: validatedFeedUrl(required("WRISTMEMO_WATCHER_FEED_URL")),
+    googleAudience: required("WRISTMEMO_GOOGLE_AUDIENCE"),
     pollMs: positiveInteger("WRISTMEMO_WATCHER_POLL_MS", 60_000),
     batchSize: positiveInteger("WRISTMEMO_WATCHER_BATCH_SIZE", 20),
     root: DEFAULT_ROOT,
     codexBin: process.env.WRISTMEMO_WATCHER_CODEX_BIN?.trim() || "codex",
     taskCwd: process.env.WRISTMEMO_WATCHER_TASK_CWD?.trim() || home,
     taskTimeoutMs: positiveInteger("WRISTMEMO_WATCHER_TASK_TIMEOUT_MS", 10 * 60_000),
+    feedTimeoutMs: positiveInteger("WRISTMEMO_WATCHER_FEED_TIMEOUT_MS", 30_000),
   };
 }
 
@@ -183,10 +223,12 @@ function replyFromCompletedTurn(params: Record<string, unknown> | undefined): st
 export async function runAppVisibleTask(
   config: Pick<Config, "codexBin" | "taskCwd" | "taskTimeoutMs">,
   onThreadCreated: (threadId: string) => Promise<void>,
+  onThreadRequestStarting: () => Promise<void> = async () => {},
 ): Promise<AppVisibleTaskResult> {
   return await new Promise<AppVisibleTaskResult>((resolve, reject) => {
     const child = spawn(config.codexBin, appServerArgs(), {
       cwd: config.taskCwd,
+      env: codexChildEnvironment(),
       stdio: ["pipe", "pipe", "pipe"],
     });
     const lines = readline.createInterface({ input: child.stdout });
@@ -242,6 +284,11 @@ export async function runAppVisibleTask(
         const error = rpcError(message, "Codex app-server initialization failed");
         if (error) throw error;
         send({ method: "initialized", params: {} });
+        // Persist the ambiguous boundary before sending thread/start. A crash
+        // after the request is written but before its response arrives cannot
+        // prove whether app-server created the thread, so it must not retry
+        // automatically.
+        await onThreadRequestStarting();
         send(threadStartRequest(config));
         return;
       }
@@ -336,12 +383,45 @@ const FIRST_CURSOR: MemoCursor = {
   transcribedAt: "1970-01-01T00:00:00.000Z",
 };
 
-async function listMemos(config: Config, cursor: MemoCursor): Promise<MemoCursor[]> {
-  const url = new URL(`${config.feedUrl}/v1/watcher/memos`);
+const GOOGLE_IDENTITY_ENDPOINT =
+  "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity";
+
+/// Cloud Workstations exposes its attached service account through the Google
+/// metadata server. The returned OIDC token is short-lived and audience-bound;
+/// it is neither written to disk nor inherited by Codex.
+export async function googleIdentityToken(
+  audience: string,
+  timeoutMs: number,
+  fetchImpl: typeof fetch = fetch,
+): Promise<string> {
+  const url = new URL(GOOGLE_IDENTITY_ENDPOINT);
+  url.searchParams.set("audience", audience);
+  url.searchParams.set("format", "full");
+  const response = await fetchImpl(url, {
+    headers: { "Metadata-Flavor": "Google" },
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!response.ok) throw new Error(`Google metadata identity endpoint returned ${response.status}`);
+  const token = (await response.text()).trim();
+  if (token.split(".").length !== 3) throw new Error("Google metadata identity endpoint returned an invalid token");
+  return token;
+}
+
+export async function listMemos(
+  config: Pick<Config, "batchSize" | "feedTimeoutMs" | "feedUrl" | "googleAudience">,
+  cursor: MemoCursor,
+  fetchImpl: typeof fetch = fetch,
+  identityToken: () => Promise<string> = () =>
+    googleIdentityToken(config.googleAudience, config.feedTimeoutMs, fetchImpl),
+): Promise<MemoCursor[]> {
+  const url = new URL(`${validatedFeedUrl(config.feedUrl)}/v1/watcher/memos`);
   url.searchParams.set("after", cursor.transcribedAt);
   url.searchParams.set("after_id", cursor.id);
   url.searchParams.set("limit", String(config.batchSize));
-  const response = await fetch(url, { headers: { Authorization: `Bearer ${config.feedToken}` } });
+  const response = await fetchImpl(url, {
+    headers: { Authorization: `Bearer ${await identityToken()}` },
+    signal: AbortSignal.timeout(config.feedTimeoutMs),
+  });
   if (!response.ok) throw new Error(`watcher feed returned ${response.status}`);
   const payload: unknown = await response.json();
   const memos = (payload as { memos?: unknown })?.memos;
@@ -375,10 +455,17 @@ async function processMemo(
   await writeState(statePath, state);
 
   try {
-    const result = await runAppVisibleTask(config, async (threadId) => {
-      state.memos[id].threadId = threadId;
-      await writeState(statePath, state);
-    });
+    const result = await runAppVisibleTask(
+      config,
+      async (threadId) => {
+        state.memos[id].threadId = threadId;
+        await writeState(statePath, state);
+      },
+      async () => {
+        state.memos[id].threadRequestStartedAt = timestamp();
+        await writeState(statePath, state);
+      },
+    );
     state.memos[id] = {
       ...state.memos[id],
       status: "succeeded",
@@ -389,13 +476,15 @@ async function processMemo(
   } catch (error) {
     const createdThreadId = (error as { threadId?: unknown }).threadId;
     const threadId = typeof createdThreadId === "string" ? createdThreadId : state.memos[id].threadId;
-    if (threadId) {
+    if (threadId || state.memos[id].threadRequestStartedAt) {
       state.memos[id] = {
         ...state.memos[id],
         status: "interrupted",
         completedAt: timestamp(),
         threadId,
-        error: `${error instanceof Error ? error.message : "Codex task did not finish"}; task exists, inspect it instead of creating a duplicate`,
+        error: threadId
+          ? `${error instanceof Error ? error.message : "Codex task did not finish"}; task exists, inspect it instead of creating a duplicate`
+          : `${error instanceof Error ? error.message : "Codex thread creation became uncertain"}; inspect recent tasks before explicitly confirming a retry`,
       };
     } else {
       state.memos[id] = {
@@ -425,7 +514,7 @@ async function bootstrap(config: Config, statePath: string): Promise<void> {
   let ignored = 0;
   let cursor = state.cursor ?? FIRST_CURSOR;
   for (;;) {
-    const memos = await listMemos(config, cursor);
+    const memos = await pollMemos(config, statePath, state, cursor);
     if (memos.length === 0) break;
     const discoveredAt = timestamp();
     for (const memo of memos) state.memos[memo.id] = { status: "ignored", discoveredAt };
@@ -440,25 +529,40 @@ async function bootstrap(config: Config, statePath: string): Promise<void> {
   console.log(JSON.stringify({ message: "bootstrap complete", ignored }));
 }
 
-async function markInterrupted(statePath: string, state: WatcherState): Promise<void> {
+export async function markInterrupted(statePath: string, state: WatcherState): Promise<void> {
   let changed = false;
   for (const record of Object.values(state.memos)) {
     if (record.status !== "started") continue;
     record.completedAt = timestamp();
-    if (record.threadId) {
+    if (record.threadId || record.threadRequestStartedAt) {
       record.status = "interrupted";
-      record.error = "watcher stopped after creating the task; inspect that task instead of creating a duplicate";
+      record.error = record.threadId
+        ? "watcher stopped after creating the task; inspect that task instead of creating a duplicate"
+        : "watcher stopped after thread creation became uncertain; inspect recent tasks before explicitly confirming a retry";
     } else {
       record.status = "pending";
       record.nextAttemptAt = timestamp();
-      record.error = "watcher stopped before a Codex task id was recorded; retry is safe";
+      record.error = "watcher stopped before thread creation was requested; retry is safe";
     }
     changed = true;
   }
   if (changed) await writeState(statePath, state);
 }
 
-async function status(statePath: string): Promise<void> {
+export function pollIsStale(
+  state: WatcherState,
+  config: Pick<Config, "feedTimeoutMs" | "pollMs">,
+  now = Date.now(),
+): boolean {
+  const lastSucceededAt = state.poll?.lastSucceededAt;
+  if (!lastSucceededAt) return true;
+  const lastSucceededMs = Date.parse(lastSucceededAt);
+  if (!Number.isFinite(lastSucceededMs)) return true;
+  const staleAfterMs = Math.max(config.pollMs * 3, config.feedTimeoutMs * 2 + config.pollMs);
+  return lastSucceededMs + staleAfterMs < now;
+}
+
+async function status(config: Config, statePath: string): Promise<void> {
   const state = await readState(statePath);
   const counts: Record<RunStatus, number> = {
     ignored: 0,
@@ -468,7 +572,7 @@ async function status(statePath: string): Promise<void> {
     failed: 0,
     interrupted: 0,
   };
-  const attention: Array<Pick<RunRecord, "status" | "attempts" | "threadId" | "nextAttemptAt" | "error"> & { id: string }> = [];
+  const attention: Array<Pick<RunRecord, "status" | "attempts" | "threadId" | "threadRequestStartedAt" | "nextAttemptAt" | "error"> & { id: string }> = [];
   for (const [id, record] of Object.entries(state.memos)) {
     counts[record.status] += 1;
     if (record.status === "pending" || record.status === "failed" || record.status === "interrupted") {
@@ -477,12 +581,21 @@ async function status(statePath: string): Promise<void> {
         status: record.status,
         attempts: record.attempts,
         threadId: record.threadId,
+        threadRequestStartedAt: record.threadRequestStartedAt,
         nextAttemptAt: record.nextAttemptAt,
         error: record.error,
       });
     }
   }
-  console.log(JSON.stringify({ bootstrappedAt: state.bootstrappedAt ?? null, ...counts, attention }, null, 2));
+  const stale = pollIsStale(state, config);
+  console.log(JSON.stringify({
+    healthy: !stale,
+    bootstrappedAt: state.bootstrappedAt ?? null,
+    poll: state.poll ?? null,
+    ...counts,
+    attention,
+  }, null, 2));
+  if (stale) process.exitCode = 2;
 }
 
 async function retry(config: Config, statePath: string, id: string): Promise<void> {
@@ -494,7 +607,13 @@ async function retry(config: Config, statePath: string, id: string): Promise<voi
   if (prior.threadId) {
     throw new Error(`${id} already created Codex task ${prior.threadId}; inspect that task instead of creating a duplicate`);
   }
+  if (prior.threadRequestStartedAt && process.env.WRISTMEMO_WATCHER_CONFIRM_NO_TASK !== "1") {
+    throw new Error(
+      `${id} may already have created a Codex task; inspect recent tasks, then set WRISTMEMO_WATCHER_CONFIRM_NO_TASK=1 only if none exists`,
+    );
+  }
   prior.status = "pending";
+  prior.threadRequestStartedAt = undefined;
   prior.nextAttemptAt = undefined;
   await writeState(statePath, state);
   await processMemo(config, statePath, state, id);
@@ -506,7 +625,21 @@ async function watch(config: Config, statePath: string, once: boolean): Promise<
   await markInterrupted(statePath, state);
 
   do {
-    const memos = await listMemos(config, state.cursor ?? FIRST_CURSOR);
+    let memos: MemoCursor[];
+    try {
+      memos = await pollMemos(config, statePath, state, state.cursor ?? FIRST_CURSOR);
+    } catch (error) {
+      console.error(JSON.stringify({
+        message: "watcher feed poll failed",
+        consecutiveFailures: state.poll?.consecutiveFailures ?? 1,
+        nextAttemptAt: state.poll?.nextAttemptAt ?? null,
+        error: error instanceof Error ? error.message : "watcher feed failed",
+      }));
+      if (once) throw error;
+      const nextAttemptAt = Date.parse(state.poll?.nextAttemptAt ?? timestamp());
+      await Bun.sleep(Math.max(0, nextAttemptAt - Date.now()));
+      continue;
+    }
     for (const memo of memos) {
       let record = state.memos[memo.id];
       if (!record) {
@@ -526,12 +659,50 @@ async function watch(config: Config, statePath: string, once: boolean): Promise<
   } while (!once);
 }
 
+async function pollMemos(
+  config: Config,
+  statePath: string,
+  state: WatcherState,
+  cursor: MemoCursor,
+): Promise<MemoCursor[]> {
+  state.poll = {
+    ...state.poll,
+    lastAttemptAt: timestamp(),
+    consecutiveFailures: state.poll?.consecutiveFailures ?? 0,
+  };
+  await writeState(statePath, state);
+  try {
+    const memos = await listMemos(config, cursor);
+    state.poll = {
+      ...state.poll,
+      lastSucceededAt: timestamp(),
+      consecutiveFailures: 0,
+      nextAttemptAt: undefined,
+      error: undefined,
+    };
+    await writeState(statePath, state);
+    return memos;
+  } catch (error) {
+    const consecutiveFailures = (state.poll?.consecutiveFailures ?? 0) + 1;
+    state.poll = {
+      ...state.poll,
+      lastFailedAt: timestamp(),
+      consecutiveFailures,
+      nextAttemptAt: new Date(Date.now() + retryDelayMs(consecutiveFailures)).toISOString(),
+      error: (error instanceof Error ? error.message : "watcher feed failed").slice(0, 1_000),
+    };
+    await writeState(statePath, state);
+    throw error;
+  }
+}
+
 async function main(): Promise<void> {
   const config = loadConfig();
   await mkdir(config.root, { recursive: true, mode: 0o700 });
+  await chmod(config.root, 0o700);
   const statePath = join(config.root, "state.json");
   const command = process.argv[2] ?? "watch";
-  if (command === "--status") return status(statePath);
+  if (command === "--status") return status(config, statePath);
 
   if (command === "--bootstrap") return bootstrap(config, statePath);
   if (command === "--once") return watch(config, statePath, true);

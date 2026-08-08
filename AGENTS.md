@@ -150,11 +150,33 @@ update tests for the failure mode they address.
 - Use UUIDs generated on the watch as the identity at every hop. Never mint a
   replacement identity for a recoverable transfer.
 - Prefer status acknowledgements and reconciliation over sending transcript
-  content back to the devices; the one-way content boundary is intentional.
+  content back to the watch; the watch's one-way content boundary is
+  intentional. The authenticated phone review surface may retrieve its owner's
+  completed transcripts separately, and that retrieval must never block capture
+  or delivery.
 - Do not silently delete audio merely to manage storage. Retention must happen
   only after the next durable hop is confirmed, with a recovery path.
 - Run the narrowest relevant test first. `./sim.sh --unit` is the normal inner
   loop; use the full harness for capture, sync, and UI changes.
+
+## TestFlight release discipline
+
+Every TestFlight upload is a release, not an anonymous build. Keep all shipping
+targets on the same version and complete this sequence for each release:
+
+1. Advance `MARKETING_VERSION` by one minor version for every TestFlight upload
+   (`1.1`, then `1.2`, then `1.3`, and so on) and increment
+   `CURRENT_PROJECT_VERSION` at the same time.
+2. Add `docs/releases/<marketing-version>.md` with concise user-facing release
+   notes and a focused "What to test" section. Copy the concise notes to the
+   TestFlight build when Apple finishes processing it.
+3. Run the narrowest relevant tests, archive, and upload the signed build.
+4. Commit the exact shipped source as `release: v<marketing-version>`, create
+   the matching `v<marketing-version>` Git tag, and push the commit and tag to
+   `origin` before treating the release as complete.
+
+Never reuse a TestFlight marketing version or build number, and never publish a
+TestFlight build whose committed source has not been pushed.
 
 ## Ideas that need a high bar
 

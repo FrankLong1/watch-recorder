@@ -16,7 +16,8 @@ Five rules, fixed:
 2. The **OpenAI key lives in Cloud Run**, never in the app binary.
 3. **Audio never rests in GCP.** Not in a bucket, not on disk, not in a log.
 4. The **phone pumps the audio**. The watch never talks to the cloud.
-5. **One-way door.** The phone does not get the transcript back.
+5. **Separate capture and review paths.** Upload responses are status-only;
+   the authenticated phone later pulls its owner's transcript history.
 
 ---
 
@@ -46,6 +47,7 @@ flowchart LR
     CR ==>|"② stream bytes"| AI
     AI ==>|"③ transcript"| CR
     CR -.->|"④ 204, no body"| P
+    DB -.->|"⑤ authenticated text-only history"| P
 
     style CR fill:#1a7f37,stroke:#0d4a20,color:#fff
     style DB fill:#1a7f37,stroke:#0d4a20,color:#fff
@@ -90,26 +92,35 @@ flowchart LR
 
 ---
 
-## The one-way door
+## Capture upload and transcript review are separate
 
-The phone uploads and forgets. Transcripts are read elsewhere — never in the
-watch or phone UI. That deletes the transcript field, the rendering, the
-polling, and any read API, collapsing the iOS work to a durable upload queue
-with no new UI.
+The phone still uploads a file and receives only the exact `204` receipt that
+drives retry. It never receives transcript content on the audio upload path.
+Google Sign-In is deliberately read-only at first: authenticating never implies
+permission to send the existing audio backlog. The phone shows the exact pending
+recording count and requires a second confirmation before it persists upload
+permission for that immutable Google account. Signing out revokes that
+permission and cancels active uploads back to `pending`.
 
-One-way for *content*, not for *acknowledgement*: the phone still needs the HTTP
-status, because that drives retry.
+After sign-in, the companion can make a separate, authenticated, text-only
+cursor request for the owner's transcript history and stores that cache in its
+protected app container. The Watch remains content-out only: no transcript is
+sent back to the wrist.
 
-**The tradeoff:** a bad transcription is invisible from the phone. You find out
-when you go read it.
+This gives the user an iPhone review and search surface, including an explicit
+“transcribing” state while a memo is still in flight. It also makes a bad
+transcription inspectable while the temporary local source audio is available.
+The workstation watcher remains a different trust boundary and still receives
+only UUID plus transcription timestamp.
 
 ```mermaid
 stateDiagram-v2
     [*] --> pending: arrives from watch
-    pending --> uploading: network available
+    pending --> pending: signed in, upload not approved
+    pending --> uploading: approved account + network available
     uploading --> uploaded: 204
-    uploading --> pending: timeout / 5xx / offline
-    uploading --> failed: 401, 413, 400
+    uploading --> pending: 401 refresh / timeout / 5xx / offline
+    uploading --> failed: 403, 413, permanent 4xx
     failed --> pending: manual retry
     uploaded --> [*]
 ```
@@ -133,7 +144,7 @@ flowchart TD
         SM["🔑 Secret Manager"]
     end
 
-    APP -->|"bearer token"| CR
+    APP -->|"Google ID token<br/>exact audience + subject"| CR
     SM -->|"OPENAI_API_KEY<br/><b>never leaves</b>"| CR
     CR --> AI["🤖 OpenAI"]
     APP -.->|"❌ never"| AI
@@ -142,10 +153,18 @@ flowchart TD
     style T fill:#1a7f37,stroke:#0d4a20,color:#fff
 ```
 
-The service is public on the internet — IAP can't help, because the caller is a
-background daemon with no Google identity. The bearer token *is* the auth. A
-leaked token means someone transcribes on your bill: revocable, rate-limitable.
-A leaked OpenAI key is the whole account.
+Cloud Run is reachable at the platform layer because the phone's ID token is
+for WristMemo's OAuth server client, not Cloud Run IAM's service URL. The
+application verifies Google's signature, issuer, exact audience, expiry and the
+user's immutable `sub` before it reads the audio stream. Initial sign-in is
+interactive but does not upload audio. A separate, counted confirmation binds
+automatic uploads to that exact `sub`; later background uploads silently refresh
+the Google session while that authorization remains in force.
+
+The iOS OAuth client is protected with Google OAuth App Check backed by Apple
+App Attest. That protects the sign-in/token issuance path from modified clients;
+the server-side subject allowlist independently limits who can upload. The
+OpenAI key remains the highest-value secret and never leaves Cloud Run.
 
 ---
 
@@ -174,4 +193,4 @@ degrade the neighbouring service too.
 | **Key compiled into the binary** | Extractable from a shipped iOS binary in minutes. |
 | **Audio to GCS, event, async worker** | The textbook shape. Buys free retries and re-transcribing the corpus against a future model — **the one capability this design gives up.** Costs audio files at rest, which was ruled out. |
 | **Firestore instead of Cloud SQL** | Its whole advantage was avoiding Cloud SQL's cost floor, already paid. And it has no full-text search, so searching your own memos would need a second service. |
-| **Returning the transcript to the phone** | Dropped deliberately — the one-way door. |
+| **Putting the transcript in the audio-upload response** | Dropped — the background upload receipt remains a small, status-only acknowledgement. The phone pulls its own text history later through a separately authenticated read API. |

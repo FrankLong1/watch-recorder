@@ -29,7 +29,7 @@ enum Latency {
     }
 
     /// Logged, not just measured — on device this is readable with
-    /// `log stream --predicate 'subsystem == "com.franklong.wristmemo"'`.
+    /// `log stream --predicate 'subsystem == "<your bundle prefix>"'`.
     static func mark(_ label: String) {
         let value = String(format: "%.0f", millisecondsSinceLaunch)
         // `notice`, not `info`: info-level entries are not persisted to the log

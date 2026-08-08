@@ -11,7 +11,7 @@ enum RecordingLaunchRequest {
 
     /// Posted in addition to setting the latch, so an app that is already
     /// running reacts immediately instead of at the next scene-phase change.
-    static let notification = Notification.Name("com.franklong.wristmemo.startRecordingRequested")
+    static let notification = Notification.Name("\(SharedConfig.identifierPrefix).startRecordingRequested")
 
     private static var isPending = false
 

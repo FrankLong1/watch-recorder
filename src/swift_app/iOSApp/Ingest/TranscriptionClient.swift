@@ -1,5 +1,4 @@
 import Foundation
-import Security
 import UIKit
 
 /// Ships memo audio to the WristMemo ingest service for transcription.
@@ -9,14 +8,17 @@ import UIKit
 /// is recorded per memo, and anything unfinished is re-queued later. Nothing
 /// here can lose a memo — the audio is never moved or deleted.
 ///
-/// It is a one-way door. The transcript is not returned; the response carries
-/// only a status code, which is what drives the retry state machine. Transcripts
-/// are read from the database, not from the phone. See 1_INGEST_ARCHITECTURE.md.
+/// The upload response is deliberately status-only, which keeps the durable
+/// retry state machine independent of text rendering. A separate authenticated
+/// history client reads transcripts later for the phone review surface. See
+/// 1_INGEST_ARCHITECTURE.md.
 @MainActor
 final class TranscriptionClient: NSObject {
 
     private let log = SharedConfig.logger("Ingest")
     private weak var library: PhoneLibrary?
+    private weak var authentication: GoogleAuthentication?
+    private var authorizationTask: Task<Void, Never>?
     private var retryTask: Task<Void, Never>?
     private var retryDelay: TimeInterval = 30
     private var didActivate = false
@@ -27,7 +29,7 @@ final class TranscriptionClient: NSObject {
     /// A background session survives the app being suspended, which matters
     /// because WatchConnectivity delivers files by launching the app in the
     /// background. A default session would start an upload and lose it.
-    static let sessionIdentifier = "com.franklong.wristmemo.ingest"
+    static let sessionIdentifier = "\(SharedConfig.identifierPrefix).ingest"
 
     /// Created once. Constructing two background sessions with the same
     /// identifier traps.
@@ -54,8 +56,13 @@ final class TranscriptionClient: NSObject {
         return URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
     }()
 
-    func activate(library: PhoneLibrary, onBackgroundEventsFinished: @escaping () -> Void) {
+    func activate(
+        library: PhoneLibrary,
+        authentication: GoogleAuthentication,
+        onBackgroundEventsFinished: @escaping () -> Void
+    ) {
         self.library = library
+        self.authentication = authentication
         backgroundEventsFinished = onBackgroundEventsFinished
         // Touch the session so it reclaims any transfer that completed while the
         // app was not running.
@@ -69,11 +76,27 @@ final class TranscriptionClient: NSObject {
                 object: nil
             )
         }
-        guard IngestCredentials.current != nil else {
-            log.info("Ingest not configured; uploads are disabled")
-            return
-        }
         recoverBackgroundTasks()
+    }
+
+    func authenticationDidChange() {
+        guard authentication?.isSignedIn == true,
+              library?.uploadsAreAuthorized == true
+        else { return }
+        recoverBackgroundTasks()
+    }
+
+    /// Revoking consent must stop work that was already scheduled, not merely
+    /// prevent the next queue scan. URLSession reports each cancellation
+    /// through the normal completion path, which returns its memo to `pending`.
+    func cancelActiveUploads() {
+        authorizationTask?.cancel()
+        authorizationTask = nil
+        retryTask?.cancel()
+        retryTask = nil
+        session.getAllTasks { tasks in
+            tasks.forEach { $0.cancel() }
+        }
     }
 
     @objc private nonisolated func applicationDidBecomeActive() {
@@ -81,7 +104,6 @@ final class TranscriptionClient: NSObject {
             // Sweeping before uploading keeps the two in a sane order: nothing
             // is queued for a memo that is about to be deleted anyway.
             self?.library?.purgeUploaded()
-            guard IngestCredentials.current != nil else { return }
             self?.recoverBackgroundTasks()
         }
     }
@@ -90,9 +112,28 @@ final class TranscriptionClient: NSObject {
     /// keys on the memo's id, so a memo that already arrived is answered without
     /// being transcribed again.
     func uploadPending() {
-        guard let library else { return }
-        for item in library.items where item.uploadState == .pending {
-            upload(item)
+        guard authorizationTask == nil,
+              let library,
+              let authentication,
+              library.uploadsAreAuthorized,
+              authentication.isSignedIn,
+              let configuration = IngestConfiguration.current
+        else { return }
+        let pending = library.items.filter { $0.uploadState == .pending }
+        guard !pending.isEmpty else { return }
+
+        authorizationTask = Task { [weak self] in
+            defer { self?.authorizationTask = nil }
+            do {
+                let idToken = try await authentication.idToken()
+                for item in pending where library.items.contains(where: { $0.id == item.id && $0.uploadState == .pending }) {
+                    guard !Task.isCancelled, library.uploadsAreAuthorized else { return }
+                    self?.upload(item, baseURL: configuration.baseURL, idToken: idToken)
+                }
+            } catch {
+                self?.log.info("Google authorization unavailable; memos remain pending")
+                self?.scheduleRetry()
+            }
         }
     }
 
@@ -112,21 +153,21 @@ final class TranscriptionClient: NSObject {
         }
     }
 
-    private func upload(_ item: PhoneLibrary.Item) {
-        guard let library, let credentials = IngestCredentials.current else { return }
+    private func upload(_ item: PhoneLibrary.Item, baseURL: URL, idToken: String) {
+        guard let library, library.uploadsAreAuthorized else { return }
         // OpenAI accepts M4A, not the raw CAF capture format. The phone
         // normalises CAFs before they reach this client; never lie about one.
         guard item.isReadyForIngest else { return }
         guard FileManager.default.fileExists(atPath: item.url.path) else { return }
 
-        guard let endpoint = URL(string: "v1/memos/\(item.id.uuidString.lowercased())", relativeTo: credentials.baseURL) else {
+        guard let endpoint = URL(string: "v1/memos/\(item.id.uuidString.lowercased())", relativeTo: baseURL) else {
             log.error("Could not build an ingest URL")
             return
         }
 
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
-        request.setValue("Bearer \(credentials.token)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
         request.setValue("audio/mp4", forHTTPHeaderField: "Content-Type")
         request.setValue("m4a", forHTTPHeaderField: "X-Audio-Format")
         // The server stores these rather than re-deriving them from the audio,
@@ -151,7 +192,10 @@ final class TranscriptionClient: NSObject {
     /// A failed upload does not change any observable system state, so nothing
     /// else would ever retry it. Back off rather than spinning.
     private func scheduleRetry() {
-        guard retryTask == nil else { return }
+        guard retryTask == nil,
+              library?.uploadsAreAuthorized == true,
+              authentication?.isSignedIn == true
+        else { return }
         let delay = retryDelay
         retryDelay = min(retryDelay * 2, Self.maximumRetryDelay)
         retryTask = Task { [weak self] in
@@ -175,6 +219,7 @@ final class TranscriptionClient: NSObject {
         if MemoDelivery.isIngestReceipt(status: status) {
             retryDelay = 30
             library.setUploadState(.uploaded, for: id)
+            library.transcriptHistoryMayHaveChanged()
             log.info("Transcribed \(id.uuidString, privacy: .public)")
             // This memo has a day left, but an upload finishing may be the only
             // thing that wakes the app all day, so sweep the older ones now.
@@ -189,6 +234,13 @@ final class TranscriptionClient: NSObject {
             library.setUploadState(.pending, for: id)
             log.error("Upload returned unexpected success \(code, privacy: .public); will retry")
             scheduleRetry()
+        case 401:
+            // Google ID tokens are intentionally short-lived. A background task
+            // can start after the token used to schedule it expires; requeue so
+            // the next attempt silently refreshes instead of stranding audio.
+            library.setUploadState(.pending, for: id)
+            log.info("Google authorization expired; will refresh and retry")
+            scheduleRetry()
         case .some(let code) where (400..<500).contains(code):
             // The request itself is wrong — a bad token, an oversized memo, a
             // malformed header. Retrying sends exactly the same bytes.
@@ -201,6 +253,121 @@ final class TranscriptionClient: NSObject {
         case nil:
             library.setUploadState(.pending, for: id)
             scheduleRetry()
+        }
+    }
+}
+
+/// Pulls the memo owner's transcript history after audio has reached the
+/// service. It deliberately uses a regular foreground session: capture and
+/// audio delivery must survive suspension, whereas reading text is a review
+/// operation and must never compete with the recording hot path.
+@MainActor
+final class TranscriptHistoryClient {
+
+    private struct Response: Decodable {
+        let memos: [Memo]
+    }
+
+    private struct Memo: Decodable {
+        let id: UUID
+        let recordedAt: TimeInterval
+        let durationSeconds: TimeInterval
+        let transcript: String
+        let transcribedAt: String
+
+        var libraryTranscript: PhoneLibrary.Transcript {
+            PhoneLibrary.Transcript(
+                id: id,
+                recordedAt: Date(timeIntervalSince1970: recordedAt),
+                duration: durationSeconds,
+                text: transcript,
+                transcribedAt: transcribedAt
+            )
+        }
+    }
+
+    private static let pageSize = 100
+
+    private weak var library: PhoneLibrary?
+    private weak var authentication: GoogleAuthentication?
+    private let log = SharedConfig.logger("TranscriptHistory")
+    private var syncTask: Task<Void, Never>?
+
+    func activate(library: PhoneLibrary, authentication: GoogleAuthentication) {
+        self.library = library
+        self.authentication = authentication
+    }
+
+    func authenticationDidChange() {
+        refreshIfPossible()
+    }
+
+    func refreshIfPossible() {
+        guard authentication?.isSignedIn == true else { return }
+        startRefreshIfNeeded()
+    }
+
+    func refreshNow() async {
+        refreshIfPossible()
+        await syncTask?.value
+    }
+
+    private func startRefreshIfNeeded() {
+        guard syncTask == nil,
+              let library,
+              let authentication,
+              let configuration = IngestConfiguration.current
+        else { return }
+
+        library.setTranscriptSyncing(true)
+        syncTask = Task { [weak self, weak library, weak authentication] in
+            defer {
+                self?.syncTask = nil
+                library?.setTranscriptSyncing(false)
+            }
+            guard let self, let library, let authentication else { return }
+            do {
+                let idToken = try await authentication.idToken()
+                try await self.fetchAllNewTranscripts(
+                    into: library,
+                    baseURL: configuration.baseURL,
+                    idToken: idToken
+                )
+            } catch {
+                // The existing cache remains readable and the next activation
+                // or pull-to-refresh retries. Never surface server details.
+                self.log.info("Transcript history refresh deferred")
+            }
+        }
+    }
+
+    private func fetchAllNewTranscripts(
+        into library: PhoneLibrary,
+        baseURL: URL,
+        idToken: String
+    ) async throws {
+        while true {
+            let cursor = library.nextTranscriptCursor
+            guard var components = URLComponents(
+                url: URL(string: "v1/memos", relativeTo: baseURL)!,
+                resolvingAgainstBaseURL: true
+            ) else { return }
+            components.queryItems = [
+                URLQueryItem(name: "after", value: cursor.transcribedAt),
+                URLQueryItem(name: "after_id", value: cursor.id.uuidString.lowercased()),
+                URLQueryItem(name: "limit", value: String(Self.pageSize))
+            ]
+            guard let url = components.url else { return }
+
+            var request = URLRequest(url: url)
+            request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+                throw URLError(.badServerResponse)
+            }
+            let page = try JSONDecoder().decode(Response.self, from: data)
+            library.mergeTranscripts(page.memos.map(\.libraryTranscript))
+            guard page.memos.count == Self.pageSize else { return }
         }
     }
 }
@@ -243,41 +410,25 @@ extension TranscriptionClient: URLSessionDataDelegate {
     ) {}
 }
 
-/// Where the phone gets its endpoint and bearer token.
+/// The ingest URL is public configuration. Authentication comes from a fresh
+/// Google ID token and is never persisted by WristMemo.
 ///
-/// The token is bootstrapped from the environment — set it once in the Xcode
-/// scheme — and then persisted to the Keychain so later launches on device work
-/// without Xcode. It is deliberately not compiled in.
-///
-/// A leaked ingest token lets someone transcribe on your bill: revocable and
-/// rate-limitable. The OpenAI key it stands in front of never leaves Cloud Run.
-enum IngestCredentials {
+/// The environment override keeps the simulator integration harness useful;
+/// signed device builds compile the URL from ignored local configuration.
+enum IngestConfiguration {
 
-    struct Credentials {
+    struct Configuration {
         let baseURL: URL
-        let token: String
     }
 
-    private static let service = "com.franklong.wristmemo.ingest"
     private static let urlKey = "WRISTMEMO_INGEST_URL"
-    private static let tokenKey = "WRISTMEMO_INGEST_TOKEN"
 
-    static var current: Credentials? {
+    static var current: Configuration? {
         let environment = ProcessInfo.processInfo.environment
         let environmentURL = environment[urlKey]?.trimmed.nilIfEmpty
-        let environmentToken = environment[tokenKey]?.trimmed.nilIfEmpty
-
-        // Persistence is best-effort and must not gate the values. An unsigned
-        // simulator build has no keychain entitlement, so this write fails —
-        // and reading back through the keychain would then discard credentials
-        // the environment had supplied perfectly well.
-        if let environmentURL { keychainSet(urlKey, environmentURL) }
-        if let environmentToken { keychainSet(tokenKey, environmentToken) }
-
-        // Environment wins when present; the keychain is the fallback that makes
-        // later launches work without it.
-        guard let urlString = environmentURL ?? keychainGet(urlKey),
-              let token = environmentToken ?? keychainGet(tokenKey),
+        let bundledURL = (Bundle.main.object(forInfoDictionaryKey: "WristMemoIngestURL") as? String)?
+            .trimmed.nilIfEmpty
+        guard let urlString = environmentURL ?? bundledURL,
               // A relative URL needs the trailing slash or the last path
               // component is replaced rather than appended.
               let baseURL = URL(string: urlString.hasSuffix("/") ? urlString : urlString + "/"),
@@ -285,46 +436,7 @@ enum IngestCredentials {
               baseURL.host != nil
         else { return nil }
 
-        return Credentials(baseURL: baseURL, token: token)
-    }
-
-    private static func query(_ account: String) -> [String: Any] {
-        [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account
-        ]
-    }
-
-    private static func keychainGet(_ account: String) -> String? {
-        var attributes = query(account)
-        attributes[kSecReturnData as String] = true
-        attributes[kSecMatchLimit as String] = kSecMatchLimitOne
-
-        var item: CFTypeRef?
-        guard SecItemCopyMatching(attributes as CFDictionary, &item) == errSecSuccess,
-              let data = item as? Data,
-              let value = String(data: data, encoding: .utf8)
-        else { return nil }
-        return value
-    }
-
-    private static func keychainSet(_ account: String, _ value: String) {
-        let data = Data(value.utf8)
-        let attributes = query(account)
-
-        let updated = SecItemUpdate(
-            attributes as CFDictionary,
-            [kSecValueData as String: data] as CFDictionary
-        )
-        guard updated != errSecSuccess else { return }
-
-        var insert = attributes
-        insert[kSecValueData as String] = data
-        // The upload runs in the background, so the item has to be readable
-        // while the device is locked.
-        insert[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-        SecItemAdd(insert as CFDictionary, nil)
+        return Configuration(baseURL: baseURL)
     }
 }
 

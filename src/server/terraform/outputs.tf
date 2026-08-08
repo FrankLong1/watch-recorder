@@ -16,17 +16,10 @@ output "ingest_service_account" {
   value = google_service_account.ingest.email
 }
 
-output "watcher_database_user" {
-  description = "Cloud SQL IAM username for the optional workstation watcher; empty when no runtime service account is configured."
-  value       = local.watcher_enabled ? google_sql_user.watcher[0].name : ""
-}
-
 output "secret_ids" {
-  description = "Set each value outside Terraform with `gcloud secrets versions add`."
+  description = "Runtime secret set outside Terraform with `gcloud secrets versions add`."
   value = {
     openai_api_key = google_secret_manager_secret.openai_api_key.secret_id
-    ingest_token   = google_secret_manager_secret.ingest_token.secret_id
-    watcher_token  = google_secret_manager_secret.watcher_token.secret_id
   }
 }
 

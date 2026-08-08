@@ -47,6 +47,19 @@ Warnings, save receipts, and failures are intentionally silent haptically; they
 remain visible on screen or in logs. A person should only have to learn “speak”
 and “finished.”
 
+When the writer has stopped, the screen briefly goes green:
+
+```text
+MESSAGE RECEIVED
+Launching background agent…
+```
+
+It is a fixed local receipt shown in the same main-actor turn as `.stop`, not a
+new capture phase and not an assertion that the phone, transcription service,
+or a downstream agent has completed. The model is already idle and a screen or
+Action-button press starts the next memo immediately. That is why the phrase
+can be satisfying without putting the network on the capture path.
+
 ## Why this architecture
 
 ### Controls, not a URL scheme or a Shortcut
@@ -131,7 +144,7 @@ appliance into an app.
 
 | Removed | Why |
 |---|---|
-| Memo list on the watch | A list implies something to do with it. The useful artifact is the transcript, in Postgres; playback and history belong on the phone, which has the screen for them. |
+| Memo list on the watch | A list implies something to do with it. The useful artifact is the transcript, cached in the authenticated phone review library; playback and history belong on the phone, which has the screen for them. |
 | Swipe-to-delete | Deletes the sole copy of a thought, from the smallest target on the smallest screen. Retention deletes it correctly on its own. |
 | Save confirmation (Delete / Done) | Asked a keep-or-discard question about a memo that was already on disk. The answer was always Done. |
 | `Saving…` | Made the user wait on compression to start their next thought — the exact moment they are most likely to have one. |
@@ -230,7 +243,8 @@ src/swift_app/
 Four states, and only one of them is red. The machine covers the microphone and
 nothing else: there is no `saving` or `saved`, because `stop()` returns to
 `idle` synchronously and hands the commit to a task that owns everything it
-needs. Two memos can be compressing while a third records.
+needs. The short green capture receipt is an overlay on that already-idle state,
+not a fifth state. Two memos can be compressing while a third records.
 
 Failures are not a state. A compressor that gives up posts a `notice` — one
 word, three seconds, over the grey — which is skipped entirely if a recording is

@@ -9,13 +9,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 : "${DATABASE_URL:?Set DATABASE_URL to an IAM-authenticated PostgreSQL connection.}"
 : "${INGEST_DATABASE_USER:?Set INGEST_DATABASE_USER to the Cloud Run service account database user.}"
-: "${WATCHER_DATABASE_USER:?Set WATCHER_DATABASE_USER to the workstation runtime service account database user.}"
-: "${WATCHER_OPERATOR_DATABASE_USER:?Set WATCHER_OPERATOR_DATABASE_USER to the Cloud SQL IAM user that runs the initial watcher.}"
 
 MIGRATIONS=(
   "0001_wristmemo.sql"
   "0002_watcher_read_role.sql"
   "0003_watcher_operator_role.sql"
+  "0004_retire_watcher_database_access.sql"
+  "0005_transcript_history_index.sql"
 )
 
 psql_db() {
@@ -62,11 +62,20 @@ apply_migration() {
     return
   fi
 
+  # These grants were part of the retired direct-Cloud-SQL watcher experiment.
+  # Existing databases retain their recorded checksums and proceed to 0004;
+  # fresh databases record the historical versions without briefly creating the
+  # obsolete access path.
+  if [[ "${filename}" == "0002_watcher_read_role.sql" || "${filename}" == "0003_watcher_operator_role.sql" ]]; then
+    echo "retire ${filename} (not applied on new databases)"
+    psql_db -c "INSERT INTO wristmemo.migration_ledger (version, filename, checksum)
+                VALUES (${version}, '${filename}', '${actual}')"
+    return
+  fi
+
   echo "apply ${filename}"
   psql_db \
     -v "ingest_database_user=${INGEST_DATABASE_USER}" \
-    -v "watcher_database_user=${WATCHER_DATABASE_USER}" \
-    -v "watcher_operator_database_user=${WATCHER_OPERATOR_DATABASE_USER}" \
     -f "${ROOT}/migrations/${filename}"
   psql_db -c "INSERT INTO wristmemo.migration_ledger (version, filename, checksum)
               VALUES (${version}, '${filename}', '${actual}')"

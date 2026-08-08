@@ -73,10 +73,11 @@ final class RecordingFlowUITests: XCTestCase {
         attachScreenshot(app, named: "2-recording")
 
         button(app).tap()
-        // Straight back to READY — the memo compresses and syncs behind this,
-        // and the point of the change is that the user never waits for it.
+        waitForStatus(app, AccessibilityID.StatusText.completionReceipt)
+        attachScreenshot(app, named: "3-message-received")
+        // The receipt is visual only; capture and delivery work behind it.
         waitForStatus(app, AccessibilityID.StatusText.ready)
-        attachScreenshot(app, named: "3-ready-again")
+        attachScreenshot(app, named: "4-ready-again")
     }
 
     /// The second thought arrives while the first is still encoding. Starting
@@ -88,12 +89,14 @@ final class RecordingFlowUITests: XCTestCase {
         button(app).tap()
         waitForStatus(app, AccessibilityID.StatusText.recording)
         button(app).tap()
-        waitForStatus(app, AccessibilityID.StatusText.ready)
+        waitForStatus(app, AccessibilityID.StatusText.completionReceipt)
 
+        // The full-screen receipt remains the already-armed start target, so
+        // a second thought is never made to wait for it to fade.
         button(app).tap()
         waitForStatus(app, AccessibilityID.StatusText.recording)
         button(app).tap()
-        waitForStatus(app, AccessibilityID.StatusText.ready)
+        waitForStatus(app, AccessibilityID.StatusText.completionReceipt)
     }
 
     /// The core promise in LATENCY.md: a launch triggered by the Action button
@@ -107,6 +110,6 @@ final class RecordingFlowUITests: XCTestCase {
         attachScreenshot(app, named: "autorecord-first-frame")
 
         button(app).tap()
-        waitForStatus(app, AccessibilityID.StatusText.ready)
+        waitForStatus(app, AccessibilityID.StatusText.completionReceipt)
     }
 }

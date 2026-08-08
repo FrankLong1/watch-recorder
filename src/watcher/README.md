@@ -25,32 +25,49 @@ watch → phone → Cloud Run transcription → Cloud SQL row
                          interactive task in the Codex desktop app
 ```
 
-## Why this is app-visible
+## Experimental app-visibility boundary
 
 `codex exec` is non-interactive automation. It can persist CLI history, but it
 does not create a task owned by the desktop app's remote-project session.
 
-The watcher starts `codex app-server --stdio` as a short-lived local child,
-performs the documented app-server `initialize` → `thread/start` →
-`turn/start` flow, and records the returned thread ID. The non-ephemeral thread
-is persisted in the remote user's normal Codex history. The desktop app's saved
-SSH project discovers that history and presents the thread as a normal remote
-task. No TCP, WebSocket, or Unix listener is opened by the watcher, and no
-app-server transport is exposed on a network.
+The watcher starts `codex app-server --stdio` as a short-lived local child and
+performs the documented app-server `initialize` → `thread/start` → `turn/start`
+flow. A real end-to-end test proved that the resulting non-ephemeral thread is
+currently discovered by the desktop app's saved SSH project and can be steered
+there. No TCP, WebSocket, or Unix listener is opened by the watcher.
+
+That discovery is a compatibility proof, not a documented desktop task-creation
+API. The official [App Server](https://learn.chatgpt.com/docs/app-server) guide
+positions the protocol as the foundation for rich clients and directs job
+automation to the SDK. The official
+[Remote connections](https://learn.chatgpt.com/docs/remote-connections) guide
+documents the desktop app starting and managing its own remote app server; it
+does not promise discovery of threads created by an independent process. Keep
+this stage harmless, monitor it after Codex upgrades, and fall back to a visible
+metadata queue if that compatibility behavior stops working.
 
 The SSH host and `/home/user` must first be saved in Codex desktop as described
 in the official [Remote connections](https://learn.chatgpt.com/docs/remote-connections)
-guide. If task creation fails before a thread ID is returned, the watcher leaves
-the memo `pending` and retries with exponential backoff rather than falling back
-to `codex exec`. Once a thread ID exists, an interrupted attempt is not
-automatically duplicated; its app-visible task is the repair surface.
+guide. Failures before `thread/start` is sent remain `pending` and retry with
+exponential backoff. Once the request may have reached app-server, the record is
+`interrupted` even if no thread ID returned: the operator must inspect recent
+tasks before explicitly confirming that a retry is safe. This closes the
+automatic duplicate window without pretending the two systems share an atomic
+transaction.
 
 ## Privacy and access
 
 The remote workstation does not connect to Cloud SQL directly. Cloud Run
-exposes a dedicated bearer-token-protected feed containing only memo UUIDs and
-transcription timestamps. The watcher token has no upload capability. The task
-prompt is fixed in source and is never constructed from memo data.
+exposes a Google-identity-protected feed containing only memo UUIDs and
+transcription timestamps. The watcher obtains a short-lived, audience-bound ID
+token for its attached service account from the Google metadata server. There
+is no downloaded key or persistent watcher secret. The task prompt is fixed in
+source and is never constructed from memo data.
+
+The feed URL must be HTTPS and cannot contain credentials, a query, or a
+fragment. The watcher starts Codex with an explicit environment allowlist, so
+Google configuration and unrelated service credentials do not cross into the
+child process.
 
 Tasks run with:
 
@@ -59,18 +76,18 @@ Tasks run with:
 - read-only sandbox; and
 - network access disabled for the turn.
 
-The watcher persists only its metadata ledger (`state.json`), service PIDs and
-logs. It does not create per-task JSONL or final-message files.
+The watcher persists only its metadata ledger (`state.json`), poll health,
+service PIDs and logs. It does not create per-task JSONL or final-message files.
 
 ## Remote install
 
-Copy this directory to the retained `/home/user/wristmemo-watcher` directory on
+Copy this directory to a retained `~/wristmemo-watcher` directory on
 the specific workstation, then:
 
 ```bash
 cd ~/wristmemo-watcher
 cp watcher.env.example watcher.env
-# Set the real Cloud Run URL and dedicated watcher token in watcher.env.
+# Set the real Cloud Run URL and OAuth server client ID in watcher.env.
 chmod 600 watcher.env
 source watcher.env
 ./run.sh --bootstrap
@@ -100,9 +117,11 @@ WRISTMEMO_WATCHER_RETRY_ID=<memo-id> ./run.sh --retry
 
 `--status` reports counts plus metadata-only attention records. A `pending`
 record has not created a task and is safe to retry. An `interrupted` record with
-a `threadId` already has an app-visible task and must be inspected rather than
-duplicated. `--retry` refuses to create a second task when a thread ID is
-already recorded.
+a `threadId` already has an app-visible task. An interrupted record with only a
+`threadRequestStartedAt` is uncertain because app-server may have committed the
+thread before its response was lost. `--retry` refuses both cases by default.
+It also reports the last successful feed poll and exits nonzero when that
+heartbeat is stale.
 
 `--retry`, `--once`, and `--bootstrap` take an exclusive local lock. Stop the
 service before an explicit repair that needs the lock:
@@ -112,6 +131,11 @@ service before an explicit repair that needs the lock:
 WRISTMEMO_WATCHER_RETRY_ID=<memo-id> ./run.sh --retry
 ./service.sh start
 ```
+
+For an uncertain record, first inspect recent `/home/user` tasks in the desktop
+app. Only when no matching task exists, run the stopped service's repair once
+with both `WRISTMEMO_WATCHER_RETRY_ID=<memo-id>` and
+`WRISTMEMO_WATCHER_CONFIRM_NO_TASK=1`.
 
 To remove only the managed startup item and running supervisor while retaining
 the state and logs:

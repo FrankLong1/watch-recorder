@@ -1,15 +1,34 @@
 import SwiftUI
 import UIKit
+import GoogleSignIn
 
 final class WristMemoAppDelegate: NSObject, UIApplicationDelegate {
     private var backgroundSessionCompletionHandler: (() -> Void)?
+    private let authLog = SharedConfig.logger("GoogleAuth")
+
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        #if !targetEnvironment(simulator)
+        // Google OAuth App Check uses the production App Attest entitlement to
+        // prove this signed iPhone app before Google issues OAuth/ID tokens.
+        // Capture remains entirely independent of this asynchronous warm-up.
+        GIDSignIn.sharedInstance.configure { [authLog] error in
+            if let error {
+                authLog.error("Google App Check setup failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        #endif
+        return true
+    }
 
     func application(
         _ application: UIApplication,
         handleEventsForBackgroundURLSession identifier: String,
         completionHandler: @escaping () -> Void
     ) {
-        guard identifier == "com.franklong.wristmemo.ingest" else {
+        guard identifier == TranscriptionClient.sessionIdentifier else {
             completionHandler()
             return
         }
@@ -20,6 +39,14 @@ final class WristMemoAppDelegate: NSObject, UIApplicationDelegate {
         let completionHandler = backgroundSessionCompletionHandler
         backgroundSessionCompletionHandler = nil
         completionHandler?()
+    }
+
+    func application(
+        _ app: UIApplication,
+        open url: URL,
+        options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+    ) -> Bool {
+        GIDSignIn.sharedInstance.handle(url)
     }
 }
 
@@ -34,13 +61,20 @@ struct WristMemoApp: App {
 
     @UIApplicationDelegateAdaptor(WristMemoAppDelegate.self) private var appDelegate
     @State private var library = PhoneLibrary()
+    @State private var authentication = GoogleAuthentication()
 
     var body: some Scene {
         WindowGroup {
             LibraryView()
                 .environment(library)
+                .environment(authentication)
                 .task {
-                    library.start(onBackgroundEventsFinished: appDelegate.finishBackgroundSessionEvents)
+                    library.start(
+                        authentication: authentication,
+                        onBackgroundEventsFinished: appDelegate.finishBackgroundSessionEvents
+                    )
+                    await authentication.restore()
+                    library.authenticationDidChange()
                 }
         }
         // The system relaunches the app when a background upload finishes while

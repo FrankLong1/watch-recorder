@@ -4,10 +4,11 @@
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
+source scripts/lib/project-config.sh
 
 SCHEME="WristMemo Watch App"
-BUNDLE_ID="com.franklong.wristmemo.watchkitapp"
-SUBSYSTEM="com.franklong.wristmemo"
+BUNDLE_ID="$WRISTMEMO_WATCH_BUNDLE_ID"
+SUBSYSTEM="$WRISTMEMO_LOGGING_SUBSYSTEM"
 DD="build/simdd"
 SHOTS="build/shots"
 

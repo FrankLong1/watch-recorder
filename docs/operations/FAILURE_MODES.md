@@ -27,13 +27,12 @@ memo that moves on *successfully* and is then lost further downstream: once the
 service has answered its exact `204 No Content` receipt, the audio has a day left and the transcript is the
 only record.
 
-**2. Every stall is silent.** The one-way door
-([1_INGEST_ARCHITECTURE.md](../architecture/1_INGEST_ARCHITECTURE.md) §"The one-way door")
-removes the return path, and with it the only place a discrepancy could have
-surfaced. There is no upload UI, no reconciliation, no alert. The failure
-signature for nearly every row in this document is identical: **you speak into
-your wrist, and weeks later notice a thought you were sure you recorded isn't
-in the database.**
+**2. A stall is visible only when someone opens the review surface.** The phone
+now renders pending, uploading, failed, and transcribed memos, then caches the
+owner's readable transcript history. That makes the failure signature
+inspectable rather than structurally invisible, but it does not make the Watch
+wait for or poll the network. A person who never opens the phone can still find
+out late that a thought did not arrive.
 
 That is the real risk in this design. Not loss — *undetected* loss of service.
 
@@ -160,17 +159,20 @@ retention clock never starts.
 |---|---|---|
 | No network at all | Background session `waitsForConnectivity`; the OS resumes it later | 🟡 |
 | **Captive portal** (hotel, airport, café WiFi) | A portal's `200` is not WristMemo's exact `204 No Content` receipt. The phone leaves the memo pending and retries | 🟡 |
-| Ingest credentials never configured | One log line, uploads disabled — the state the device build is in right now | 🔴 |
-| Device rebooted, not yet unlocked | Keychain remains unavailable until first unlock, but the client installs its active observer before checking credentials and reclaims pending background work once credentials become readable | 🟡 |
-| Token rotated or revoked | `401` → state `failed`, explicitly not retried. `LibraryView` renders a badge; **there is no retry affordance anywhere in the UI**, so "manual retry only" currently means "reinstall" | 🔴 |
+| User has not completed Google Sign-In | Audio stays `pending`; the phone library offers Google Sign-In for identity and transcript access without uploading audio | 🟡 |
+| User signed in but has not approved audio upload | Audio stays `pending`; the phone shows the exact held count and requires a separate confirmation bound to that immutable Google account | 🔵 |
+| User signs out or changes Google account | The account-bound upload authorization is revoked, active tasks cancel back to `pending`, and the backlog requires a fresh counted approval | 🔵 |
+| Device rebooted, not yet unlocked | Google session restoration may wait until protected credential storage is available; audio remains pending and is reconciled on the next activation | 🟡 |
+| Google ID token expires or is rejected | `401` returns the memo to `pending`; the next attempt silently refreshes the Google session. If restoration needs interaction, the phone shows signed out | 🟡 |
+| Wrong Google account | Exact verified `sub` allowlist returns `403` → terminal `failed`; changing to the allowed account makes manual retry safe | 🔴 |
 | Memo over 25 MB | `413` → `failed`, permanent | 🔴 |
 | Low Data Mode / cellular disabled for the app | Deferred until WiFi | 🟡 |
 | Cloud Run scaled to zero | Cold start ~1 s, absorbed by the retry policy | 🟡 |
 | Server 5xx | `pending` + backoff 30 s → 30 min | 🟡 |
-| Retry backoff never fires | The retry `Task` dies with the process. Recovery depends on `didBecomeActive` or a WatchConnectivity relaunch — **and the one-way door means the user has no reason to ever open the phone app** | 🔴 |
+| Retry backoff never fires | The retry `Task` dies with the process. Recovery depends on `didBecomeActive` or a WatchConnectivity relaunch; the phone library now exposes the pending/failed memo, but cannot repair it while never opened | 🔴 |
 | Endpoint URL changed (new Cloud Run revision, new domain) | DNS/TLS failure → infinite retry against a dead host | 🔴 |
-| Someone else has the bearer token | They transcribe on your bill. No rate limit, no per-token quota, no alert | 💸 |
-| Public endpoint gets scanned / abused | Auth rejects it cheaply, but request volume still bills Cloud Run | 💸 |
+| A live Google ID token is stolen | It is audience-bound, subject-bound, and short-lived, but replay remains possible until expiry; OAuth App Check/App Attest reduces issuance from modified clients | 💸 |
+| Public endpoint gets scanned / abused | Google signature/audience/subject verification rejects requests before audio is read, but request volume can still bill Cloud Run | 💸 |
 
 **Captive portals stay important because they delay delivery, but they no longer
 produce a false success.** The exact receipt keeps the memo pending, and the
@@ -196,10 +198,11 @@ ordinary retry policy gets another chance after the user completes the portal.
 | Secret rotated without redeploy | Old instances keep the old key until they cycle | 🟠 |
 | Bad revision deployed | Every memo `500`s until rolled back. Nothing alerts | 🔴 |
 
-**Everything from "transcript is silence" down is the 🟠 class, and the one-way
-door makes it structural.** The transcript is never shown next to the audio on
-any device, so a wrong transcript is indistinguishable from a right one until a
-human reads the row — by which time the audio is on a watch they may have wiped.
+**Everything from "transcript is silence" down is the 🟠 class.** The
+authenticated phone library now makes the transcript reviewable and searchable,
+with original-audio playback while its temporary retained copy exists. The
+remaining risk is that the person does not review it before that local audio
+retention window ends.
 
 ---
 
@@ -216,9 +219,10 @@ remain proposals.
 |---|---|---|
 | Watcher child crashes | Its user-owned supervisor restarts it after five seconds; the retained startup dispatcher restarts the supervisor after a workstation restart | 🔵 |
 | Cloud Workstation is stopped | Metadata remains in Cloud SQL and is discovered after the workstation runs again; availability is still bounded by the workstation lifecycle | 🟡 |
-| Feed or app-server fails before a thread ID exists | The memo remains `pending` in the atomic ledger and retries with one-minute exponential backoff capped at fifteen minutes | 🟡 |
-| Watcher stops after a thread ID exists | The record becomes `interrupted` with that app-visible thread ID. Automatic retry is refused to avoid a duplicate task | 🔵 |
-| Poller silently launches a headless CLI session | Prevented: the implementation uses the documented app-server protocol, and the end-to-end check verifies the thread through the desktop app | 🔵 |
+| Feed fails or hangs | The request aborts after 30 seconds; durable poll health records the failure and retries with one-minute exponential backoff capped at fifteen minutes. Status becomes unhealthy after three missed poll intervals | 🔵 |
+| App-server fails before `thread/start` is sent | The memo remains `pending` in the atomic ledger and retries with the same capped exponential backoff | 🟡 |
+| Watcher stops after `thread/start` may have been sent | The record becomes `interrupted`, even without a returned thread ID. Automatic retry is refused; a human must inspect recent tasks and explicitly confirm when none exists | 🔵 |
+| Poller silently launches a headless CLI session | Prevented in the current compatibility proof: the implementation uses the documented app-server protocol, and the end-to-end check verifies the thread through the desktop app. Cross-process desktop discovery remains an experimental dependency, not a documented task-creation API | 🔵 |
 | Transcript or audio reaches the workstation | Prevented in this version: the feed returns only UUID and transcription time, and the task prompt is fixed in source | 🔵 |
 | Agent hallucinates a todo from an ambiguous memo | Not yet reachable because transcripts are not passed; remains a design risk for the proposed next stage | 🟠 |
 | **Execution agent acts on a mis-transcribed memo** | Not yet reachable. If execution is later built, the blast radius of stage 4's 🟠 class becomes "a wrong action in the world" | 🟠 |
@@ -239,9 +243,9 @@ off for a week and hasn't resynced backdates a memo; the server accepts any
 positive unix timestamp. Ordering in the database is then wrong, and any
 "what did I say today" query misses it.
 
-**Identity.** `config.defaultUserId` is a single hardcoded user. Fine for one
-person, but it means there is no way to tell two watches apart if a second one
-is ever paired — both write into the same stream.
+**Identity.** Rows are now scoped to the immutable Google subject that the
+phone presents. Two watches belonging to the same person intentionally share a
+review stream; device-specific diagnosis would still need a separate device ID.
 
 **Storage pressure on the watch.** Nothing prunes. Memos accumulate as `.m4a`
 forever, and watchOS reclaims app storage under pressure by evicting the app —
@@ -309,5 +313,6 @@ flowchart LR
    should surface somewhere a human looks, rather than living in a state field
    nothing renders.
 
-None of these break the one-way door — they carry *status*, never transcripts,
-which the architecture already allows for exactly this reason.
+None of these require sending transcript content back to the Watch. The phone's
+authenticated review library can show its owner's text while the wrist remains
+a capture-only appliance.

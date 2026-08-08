@@ -21,18 +21,26 @@ function positiveInt(name: string, fallback: number): number {
   return value;
 }
 
+function requiredList(name: string): string[] {
+  const values = required(name)
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (values.length === 0) throw new Error(`${name} must contain at least one value`);
+  return [...new Set(values)];
+}
+
 export interface Config {
   port: number;
-  ingestToken: string;
-  watcherToken: string;
+  googleOAuthClientId: string;
+  googleAllowedUserSubjects: string[];
+  googleWatcherServiceAccounts: string[];
   openaiApiKey: string;
   openaiBaseUrl: string;
   openaiModel: string;
   /// OpenAI rejects uploads over 25 MB. At the watch's 32 kbit/s that is about
   /// 100 minutes, so this is a guard rather than a real constraint.
   maxAudioBytes: number;
-  /// Single-user for now. A real auth layer would derive this from the token.
-  defaultUserId: string;
   database: DatabaseConfig;
 }
 
@@ -59,13 +67,13 @@ function databaseConfig(): DatabaseConfig {
 export function loadConfig(): Config {
   return {
     port: positiveInt("PORT", 8080),
-    ingestToken: required("WRISTMEMO_INGEST_TOKEN"),
-    watcherToken: required("WRISTMEMO_WATCHER_TOKEN"),
+    googleOAuthClientId: required("GOOGLE_OAUTH_CLIENT_ID"),
+    googleAllowedUserSubjects: requiredList("GOOGLE_ALLOWED_USER_SUBJECTS"),
+    googleWatcherServiceAccounts: requiredList("GOOGLE_WATCHER_SERVICE_ACCOUNTS"),
     openaiApiKey: required("OPENAI_API_KEY"),
     openaiBaseUrl: optional("OPENAI_BASE_URL", "https://api.openai.com/v1"),
     openaiModel: optional("OPENAI_MODEL", "gpt-4o-transcribe"),
     maxAudioBytes: positiveInt("MAX_AUDIO_BYTES", 25 * 1024 * 1024),
-    defaultUserId: optional("WRISTMEMO_USER_ID", "frank"),
     database: databaseConfig(),
   };
 }

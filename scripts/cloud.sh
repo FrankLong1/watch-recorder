@@ -13,8 +13,12 @@
 # directly into the phone app's container exactly as `session(_:didReceive:)`
 # would have left it, which makes the upload path testable on its own.
 #
-# Credentials come from .env via SIMCTL_CHILD_*, so no token is ever written
-# into the Xcode scheme (which is committed) or into the repo.
+# The endpoint and OAuth client IDs come from ignored local build configuration.
+# Google Sign-In itself is interactive; this harness never handles a password,
+# refresh token, or reusable ingest secret. Production App Check enforcement
+# intentionally rejects simulator sign-in unless a separately configured debug
+# provider is used, so this harness is for local queues or pre-enforcement smoke
+# tests; the secure production auth path must be proved on real hardware.
 #
 # Caveat worth knowing: the simulator has no background transfer daemon, so
 # TranscriptionClient falls back to a default URLSession there. This proves the
@@ -22,6 +26,7 @@
 # survives the app being suspended — only hardware shows that.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+source scripts/lib/project-config.sh
 
 DO_DB=0; KEEP=0; PHRASE="Follow up. Call the broker about the NVDA position."
 while [[ $# -gt 0 ]]; do
@@ -39,20 +44,23 @@ pass() { printf '\033[32m  ✓ %s\033[0m\n' "$1"; }
 fail() { printf '\033[31m  ✗ %s\033[0m\n' "$1" >&2; }
 die()  { printf '\033[31m%s\033[0m\n' "$1" >&2; exit 1; }
 
-BID=com.franklong.wristmemo
+BID="$WRISTMEMO_PHONE_BUNDLE_ID"
+SUBSYSTEM="$WRISTMEMO_LOGGING_SUBSYSTEM"
 WORK="${TMPDIR:-/tmp}/wristmemo-cloud"
 mkdir -p "$WORK"
 
-# --- credentials ---------------------------------------------------------------
-[[ -f .env ]] || die ".env not found. It holds WRISTMEMO_INGEST_TOKEN; see src/server/README.md."
-TOKEN=$(grep -E '^WRISTMEMO_INGEST_TOKEN=' .env | head -1 | cut -d= -f2- | tr -d '\n\r')
-[[ -n "$TOKEN" ]] || die "WRISTMEMO_INGEST_TOKEN missing from .env"
-
+# --- endpoint and OAuth build configuration -----------------------------------
 URL="${WRISTMEMO_INGEST_URL:-$(grep -E '^WRISTMEMO_INGEST_URL=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\n\r')}"
 if [[ -z "$URL" ]]; then
     URL=$(terraform -chdir=src/server/terraform output -raw service_url 2>/dev/null || true)
 fi
 [[ -n "$URL" ]] || die "No service URL. Add WRISTMEMO_INGEST_URL to .env, or apply the Terraform."
+LOCAL_SIGNING="src/swift_app/Config/Signing.local.xcconfig"
+[[ -f "$LOCAL_SIGNING" ]] || die "Missing $LOCAL_SIGNING; copy Signing.local.xcconfig.example and add the two Google OAuth client IDs."
+grep -Eq '^GID_CLIENT_ID[[:space:]]*=[[:space:]]*[^[:space:]]+' "$LOCAL_SIGNING" \
+    || die "GID_CLIENT_ID is missing from $LOCAL_SIGNING"
+grep -Eq '^GID_SERVER_CLIENT_ID[[:space:]]*=[[:space:]]*[^[:space:]]+' "$LOCAL_SIGNING" \
+    || die "GID_SERVER_CLIENT_ID is missing from $LOCAL_SIGNING"
 bold "Service: $URL"
 
 # Fail fast and legibly rather than after a four-minute build.
@@ -83,7 +91,8 @@ pass "simulator ready"
 # --- build and install ---------------------------------------------------------
 bold "Building"
 xcodebuild -project src/swift_app/WristMemo.xcodeproj -scheme WristMemo -destination "id=$UDID" \
-    CODE_SIGNING_ALLOWED=NO -derivedDataPath "$WORK/dd" build > "$WORK/build.log" 2>&1 \
+    CODE_SIGNING_ALLOWED=NO WRISTMEMO_INGEST_URL="$URL" \
+    -derivedDataPath "$WORK/dd" build > "$WORK/build.log" 2>&1 \
     || { tail -30 "$WORK/build.log"; die "build failed — full log at $WORK/build.log"; }
 APP="$WORK/dd/Build/Products/Debug-iphonesimulator/WristMemo.app"
 [[ -d "$APP" ]] || die "built, but no app at $APP"
@@ -114,12 +123,11 @@ pass "planted memo $ID"
 
 # --- run -----------------------------------------------------------------------
 bold "Uploading"
-SIMCTL_CHILD_WRISTMEMO_INGEST_URL="$URL" \
-SIMCTL_CHILD_WRISTMEMO_INGEST_TOKEN="$TOKEN" \
-    xcrun simctl launch "$UDID" "$BID" >/dev/null
+xcrun simctl launch "$UDID" "$BID" >/dev/null
+printf '  Complete Sign in with Google in the simulator if prompted.\n'
 
 STATE=pending
-for _ in $(seq 1 90); do
+for _ in $(seq 1 300); do
     STATE=$(python3 -c "import json;print(json.load(open('$MEMOS/$ID.json')).get('uploadState',''))" 2>/dev/null || echo "")
     [[ "$STATE" == "uploaded" || "$STATE" == "failed" ]] && break
     # Doubles as a liveness check and as the poll delay.
@@ -133,7 +141,7 @@ else
     fail "app reports '$STATE' (expected uploaded)"
     FAILURES=$((FAILURES + 1))
     xcrun simctl spawn "$UDID" log show --last 3m --info \
-        --predicate 'subsystem == "com.franklong.wristmemo"' --style compact 2>/dev/null | tail -8
+        --predicate "subsystem == \"$SUBSYSTEM\"" --style compact 2>/dev/null | tail -8
 fi
 
 # --- verify the row ------------------------------------------------------------
@@ -141,22 +149,35 @@ if [[ $DO_DB -eq 1 ]]; then
     bold "Checking Cloud SQL"
     PSQL="${PSQL_BIN:-/opt/homebrew/opt/libpq/bin/psql}"
     command -v cloud-sql-proxy >/dev/null || die "cloud-sql-proxy not installed (brew install cloud-sql-proxy)"
+    command -v terraform >/dev/null || die "terraform not installed"
     [[ -x "$PSQL" ]] || die "psql not found at $PSQL (brew install libpq)"
 
+    TF_ROOT="src/server/terraform"
+    INSTANCE_CONNECTION=$(terraform -chdir="$TF_ROOT" output -raw instance_connection_name 2>/dev/null) \
+        || die "Could not read instance_connection_name from local Terraform state."
+    DATABASE_NAME=$(terraform -chdir="$TF_ROOT" output -raw database_name 2>/dev/null) \
+        || die "Could not read database_name from local Terraform state."
+    MIGRATOR_JSON=$(terraform -chdir="$TF_ROOT" output -json migrator_database_user 2>/dev/null) \
+        || die "Could not read migrator identity from local Terraform state."
+    MIGRATOR_SERVICE_ACCOUNT=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["service_account"])' <<<"$MIGRATOR_JSON")
+    MIGRATOR_DATABASE_USER=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["database_user"])' <<<"$MIGRATOR_JSON")
+    [[ -n "$INSTANCE_CONNECTION" && -n "$DATABASE_NAME" && -n "$MIGRATOR_SERVICE_ACCOUNT" && -n "$MIGRATOR_DATABASE_USER" ]] \
+        || die "Local Terraform outputs are incomplete."
+
     cloud-sql-proxy --auto-iam-authn --port 55431 \
-        --impersonate-service-account wristmemo-migrator@gv-data-platform.iam.gserviceaccount.com \
-        gv-data-platform:us-central1:demo-agent-inbox-postgres > "$WORK/proxy.log" 2>&1 &
+        --impersonate-service-account "$MIGRATOR_SERVICE_ACCOUNT" \
+        "$INSTANCE_CONNECTION" > "$WORK/proxy.log" 2>&1 &
     PROXY_PID=$!
     trap 'kill $PROXY_PID 2>/dev/null || true' EXIT
 
-    DSN='host=127.0.0.1 port=55431 dbname=wristmemo user=wristmemo-migrator@gv-data-platform.iam sslmode=disable'
+    DSN="host=127.0.0.1 port=55431 dbname=$DATABASE_NAME user=$MIGRATOR_DATABASE_USER sslmode=disable"
     # IAM grants can take a moment to propagate on a freshly created identity.
     for _ in $(seq 1 25); do "$PSQL" "$DSN" -X -tAc "SELECT 1" >/dev/null 2>&1 && break; done
 
-    ROW=$("$PSQL" "$DSN" -X -tAc \
-        "SELECT coalesce(route,'(none)') || ' | ' || coalesce(body,'') FROM wristmemo.memos WHERE id='$ID';" 2>/dev/null || echo "")
-    if [[ -n "$ROW" ]]; then
-        pass "row in Cloud SQL: $ROW"
+    ROW_EXISTS=$("$PSQL" "$DSN" -X -tAc \
+        "SELECT 1 FROM wristmemo.memos WHERE id='$ID';" 2>/dev/null || echo "")
+    if [[ "$ROW_EXISTS" == "1" ]]; then
+        pass "row exists in Cloud SQL"
     else
         fail "no row for $ID"
         FAILURES=$((FAILURES + 1))
