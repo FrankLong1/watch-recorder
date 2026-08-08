@@ -10,6 +10,9 @@
 	<string>$(WRISTMEMO_GOOGLE_IOS_CLIENT_ID)</string>
 	<key>GIDServerClientID</key>
 	<string>$(WRISTMEMO_GOOGLE_SERVER_CLIENT_ID)</string>
+	<!-- HTTPS and sign-in crypto are provided by Apple's operating system. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
