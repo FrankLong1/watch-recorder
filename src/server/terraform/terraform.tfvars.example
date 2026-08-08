@@ -1,0 +1,24 @@
+# Real values live in terraform.tfvars, which is gitignored. This repo is
+# public, so nothing here names actual infrastructure.
+project_id = "your-gcp-project-id"
+region     = "us-central1"
+
+# The existing Cloud SQL instance to attach to. This configuration reads it
+# through a data source and never manages it.
+sql_instance_name = "your-shared-sql-instance"
+
+# Left empty on the first apply so the database, identity, secrets and image
+# repository are created before there is anything to deploy. Fill in the digest
+# emitted by `gcloud builds submit` and apply again.
+image = ""
+
+# Human IAM user allowed to impersonate the migrator when running migrations.
+# Required — there is no default.
+operator_iam_user = "you@example.com"
+
+# Optional: the service account attached to the individual Cloud Workstation
+# that runs the watcher. The resulting database identity is read-only.
+watcher_service_account_email = ""
+
+openai_model = "gpt-4o-transcribe"
+user_id      = "frank"

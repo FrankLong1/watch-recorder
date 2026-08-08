@@ -13,33 +13,37 @@ reconstructs a valid AAC memo from a hard-killed session.
 
 Not yet on real hardware — the Action button itself has no simulator
 equivalent, so press-to-record latency and control assignment still need an
-Ultra. Setup and the remaining checklist: [DEVICE_TESTING.md](DEVICE_TESTING.md).
+Ultra. Setup and the remaining checklist: [DEVICE_TESTING.md](docs/operations/DEVICE_TESTING.md).
 
 ## The interface
 
-One button, the size of the screen. **Grey is READY, red is RECORDING**, and a
-tap anywhere toggles — as does the Action button, and Double Tap. There is no
-timer, meter, cancel, confirmation, list or settings screen. Red means audio is
-genuinely reaching the disk, never merely that a press was received.
+One button, the size of the screen. **Grey READY starts; red RECORDING stops.**
+The Action Button is launch-or-start: it starts from idle and does nothing while
+a memo is starting, recording, or paused. While recording, a screen tap, Double
+Tap, lowering the wrist for 8 seconds, or exiting WristMemo stops and saves.
+There is no timer, meter, cancel, confirmation, list or settings screen. Red
+means audio is genuinely reaching the disk, never merely that a press was
+received.
 
 ## What happens on a press
 
 1. Action button → the assigned control fires `StartRecordingIntent`.
 2. The intent's `supportedModes = .foreground(.immediate)` brings the watch app
    forward at once.
-3. A light haptic acknowledges the press; the screen stays grey until the
-   recorder is actually writing, then turns red with the "speak" haptic.
-4. A second press stops it. The screen is grey again immediately — compression,
-   the transfer to the phone and the upload all happen behind it, so the next
-   thought never waits on the last one.
+3. The screen stays grey until the recorder is actually writing; then it turns
+   red and emits the one **START** haptic. That means “speak now.”
+4. Double Tap, a screen tap, an 8-second wrist-down timeout, or exiting the app
+   stops it. The screen is grey again immediately — compression, the transfer
+   to the phone and the upload all happen behind it, so the next thought never
+   waits on the last one. The same **STOP** haptic plays for every end path.
 5. Each device deletes its copy of the audio 24 h after the next hop has taken
-   it, and never before. See DESIGN.md §"Memos delete themselves".
+   it, and never before. See [Design](docs/product/DESIGN.md#Memos-delete-themselves).
 
-Product boundary: [CAPTURE_APPLIANCE.md](CAPTURE_APPLIANCE.md). Design rationale:
-[DESIGN.md](DESIGN.md). The full friction budget — from press-to-recording through
-later review — is [LATENCY.md](LATENCY.md). What Apple does not allow:
-[LIMITATIONS.md](LIMITATIONS.md). Source + camera context brainstorming:
-[SOURCE_CONTEXT.md](SOURCE_CONTEXT.md).
+Product boundary: [Capture appliance](docs/product/CAPTURE_APPLIANCE.md). Design
+rationale: [Design](docs/product/DESIGN.md). The full friction budget — from
+press-to-recording through later review — is [Latency](docs/operations/LATENCY.md).
+What Apple does not allow: [Limitations](docs/operations/LIMITATIONS.md). Source
+and camera context brainstorming: [Source context](docs/product/SOURCE_CONTEXT.md).
 
 ## Assigning it to the Action button
 
@@ -47,7 +51,7 @@ On the watch, after installing the app once:
 
 1. **Settings › Action Button**
 2. Tap **Action**, choose **Control**
-3. Tap the control preview, then pick **WristMemo → Record Voice Memo**
+3. Tap the control preview, then pick **WristMemo → Your Agents**
 4. Optionally set **Press Duration** to *Short Press*
 
 Or from the iPhone: **Watch app › Action Button**, same choices.
@@ -57,13 +61,13 @@ the microphone permission prompt has to be answered once before a press can
 record without interaction.
 
 It also appears in **Control Center** (side button) and can be added to the
-**Smart Stack**. On non-Ultra watches, use the Siri phrase "Start a memo in
-WristMemo" or add the Shortcuts action.
+**Smart Stack**. On non-Ultra watches, use the Siri phrase "Control your agents
+in WristMemo" or add the Shortcuts action.
 
 ## Building
 
 ```bash
-open WristMemo.xcodeproj
+open src/swift_app/WristMemo.xcodeproj
 ```
 
 Signing is already configured (Team `44X645LJ6H`); run the
@@ -72,7 +76,7 @@ Signing is already configured (Team `44X645LJ6H`); run the
 Command line, without signing:
 
 ```bash
-xcodebuild -project WristMemo.xcodeproj -target "WristMemo Watch App" \
+xcodebuild -project src/swift_app/WristMemo.xcodeproj -target "WristMemo Watch App" \
   -sdk watchsimulator26.5 -configuration Debug build CODE_SIGNING_ALLOWED=NO
 ```
 
@@ -93,35 +97,35 @@ Bundle identifiers are `com.franklong.wristmemo*` and signing uses Team
 
 ## Testing
 
-`./sim.sh` is the repeatable path: it boots a watch simulator, builds, runs both
+`./scripts/sim.sh` is the repeatable path: it boots a watch simulator, builds, runs both
 test bundles, then drives the app and asserts on the real container and log.
 
 ```bash
-./sim.sh                 # unit tests, UI taps, and every harness scenario
-./sim.sh --unit          # logic bundle only (~2s inner loop)
-./sim.sh --ui            # XCUITest taps only
-./sim.sh --watch         # re-run on save
-./sim.sh --repeat 20     # run N times; surfaces launch-path races
-./sim.sh --help          # every flag
+./scripts/sim.sh                 # unit tests, UI taps, and every harness scenario
+./scripts/sim.sh --unit          # logic bundle only (~2s inner loop)
+./scripts/sim.sh --ui            # XCUITest taps only
+./scripts/sim.sh --watch         # re-run on save
+./scripts/sim.sh --repeat 20     # run N times; surfaces launch-path races
+./scripts/sim.sh --help          # every flag
 ```
 
 Scenarios cover a record→save round trip, the pre-armed capture, crash recovery
 with its index ordering, and the first-sample latency marker. Simulator latency
-is not device latency — see [the friction budget](LATENCY.md).
+is not device latency — see [the friction budget](docs/operations/LATENCY.md).
 
 ## Verifying on hardware
 
-See [DEVICE_TESTING.md](DEVICE_TESTING.md) — it covers the Mac setup that is
+See [DEVICE_TESTING.md](docs/operations/DEVICE_TESTING.md) — it covers the Mac setup that is
 already done, the Developer Mode / pairing steps that need your hardware, and
-what remains unverified. `run.sh` builds, installs and streams logs from a
-paired watch; `sim.sh` is its simulator counterpart.
+what remains unverified. `scripts/run.sh` builds and installs through the paired
+iPhone by default; `scripts/run.sh --watch` uses the faster direct Watch path
+when its Wi-Fi tunnel is healthy. `scripts/sim.sh` is its simulator counterpart.
 
 ## Layout
 
 ```
-Shared/          intent + hand-off, compiled into both watch targets
-WatchControls/   the ControlWidget
-WatchApp/        recorder, storage, sync, SwiftUI
-iOSApp/          companion library
-Config/          Info.plists
+src/swift_app/   the Xcode project and all Apple-target source
+src/server/      Cloud Run ingest service, migrations, and Terraform
+scripts/         simulator, device, deployment, and icon tooling
+docs/            product, architecture, operations, research, and reviews
 ```

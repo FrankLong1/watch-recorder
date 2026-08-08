@@ -18,6 +18,6 @@ xcuserdata/
 
 # Backend build and provider caches. Lockfiles remain tracked for reproducible
 # installs and Terraform provider selection.
-server/node_modules/
-server/dist/
-server/terraform/.terraform/
+src/server/node_modules/
+src/server/dist/
+src/server/terraform/.terraform/

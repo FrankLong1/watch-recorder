@@ -51,8 +51,8 @@ or screen.
 
 ## The watch is a capture appliance
 
-`CAPTURE_APPLIANCE.md` is the detailed product boundary. This section is its
-working summary.
+[`docs/product/CAPTURE_APPLIANCE.md`](docs/product/CAPTURE_APPLIANCE.md) is the
+detailed product boundary. This section is its working summary.
 
 Keep the watch app radically thin. Its job is limited to what must happen before
 the audio can leave the wrist:
@@ -68,16 +68,53 @@ transcription, entity extraction, routing, titles, summaries, context linking,
 search, configuration, history, workflows, and agent drafts. The app should not
 become a tiny memo manager merely because it can render those things.
 
+### Capture interaction contract
+
+Keep start and stop triggers explicit and one-directional. The only ways to
+start a memo are the assigned Action Button control and a tap on the in-app
+**READY** surface. The Action Button is launch-or-start: when idle, it opens
+WristMemo and starts; when already starting, recording, or paused, it does
+nothing. Double Tap must never start a memo.
+
+Once recording, the intentional stop routes are Double Tap, a tap on the full
+screen, lowering the wrist for the short inactivity timeout, and exiting the
+app. Silence and safety caps remain automatic backstops, not extra controls.
+There are exactly two haptic meanings: `.start` only when the microphone is
+writing, and `.stop` whenever a recording ends. Never add acknowledgement,
+warning, save, or failure haptics.
+
+```mermaid
+flowchart TD
+    idle["Watch idle / screen asleep"]
+    action["Press Action Button"]
+    ready["Open WristMemo\nTap READY"]
+    recording["Recording\nmic live"]
+    doubletap["Double Tap fingers"]
+    screen["Tap screen"]
+    wristdown["Lower wrist\n+ inactivity timeout"]
+    exit["Exit WristMemo"]
+    saved["Stop recording\nSave audio locally"]
+
+    idle --> action --> recording
+    idle --> ready --> recording
+    recording --> doubletap --> saved
+    recording --> screen --> saved
+    recording --> wristdown --> saved
+    recording --> exit --> saved
+    saved --> idle
+```
+
 ### Button-deletion test
 
 For every watch control, ask: *if this disappeared, would a real thought become
 harder to capture safely?* If not, remove it or move it downstream.
 
-- Start belongs on the Action button / control / complication, not behind a
-  sequence of in-app choices.
+- Start belongs on the Action button / control or the single in-app READY
+  surface, not behind a sequence of in-app choices.
 - Stopping needs one deterministic fallback surface because every automatic or
-  gesture path can fail. Double Tap, second Action press, and silence should
-  remove the need to use it most of the time.
+  gesture path can fail. Double Tap, the full-screen stop target, wrist-down
+  inactivity, app exit, and silence should remove the need to use it most of the
+  time.
 - A visible **Discard** control has a very high bar: it can destroy the only
   source recording. Prefer automatic handling of genuinely empty captures and
   keep any deletion reversible.
@@ -97,14 +134,16 @@ Prioritise work in this order:
 4. Richer extraction, routing, and domain-specific intelligence.
 5. New integrations, agent execution, and optional capture modalities.
 
-Treat the failure catalogue in `FAILURE_MODES.md` as a product backlog, not
-just documentation. Changes to the pipeline should add or update tests for the
-failure mode they address.
+Treat the failure catalogue in
+[`docs/operations/FAILURE_MODES.md`](docs/operations/FAILURE_MODES.md) as a
+product backlog, not just documentation. Changes to the pipeline should add or
+update tests for the failure mode they address.
 
 ## Working in this repository
 
-- Read `README.md`, `DESIGN.md`, the friction budget (`LATENCY.md`),
-  `LIMITATIONS.md`, and `FAILURE_MODES.md` before changing capture or delivery
+- Read `README.md`, `docs/product/DESIGN.md`, the friction budget
+  (`docs/operations/LATENCY.md`), `docs/operations/LIMITATIONS.md`, and
+  `docs/operations/FAILURE_MODES.md` before changing capture or delivery
   behaviour.
 - Preserve the deliberate architecture: watch records; phone transports audio;
   Cloud Run transcribes without persisting audio; Postgres stores text.
