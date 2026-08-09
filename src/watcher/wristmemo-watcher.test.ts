@@ -10,13 +10,13 @@ import {
   codexChildEnvironment,
   discoverMemos,
   googleIdentityToken,
-  listAllMemos,
   listMemosPage,
   markInterrupted,
   pollIsStale,
   processDue,
   readState,
   retryDelayMs,
+  scanMemoPages,
   taskPrompt,
   threadStartRequest,
   turnStartRequest,
@@ -252,13 +252,16 @@ sleep 5
       }));
       return Response.json({ memos });
     }) as typeof fetch;
-    const memos = await listAllMemos({
+    const pages: string[][] = [];
+    await scanMemoPages({
       feedUrl: "https://watcher.example",
       googleAudience: "audience",
       feedTimeoutMs: 1_000,
       batchSize: 2,
+    }, async (page) => {
+      pages.push(page.map((memo) => memo.id));
     }, feed, async () => "header.payload.signature");
-    expect(memos.map((memo) => memo.id)).toEqual(ids);
+    expect(pages).toEqual([ids.slice(0, 2), ids.slice(2)]);
     expect(requestedAfter).toEqual([
       "1970-01-01T00:00:00.000Z",
       "2026-08-08T10:01:00.000Z",

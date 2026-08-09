@@ -587,20 +587,20 @@ export async function listMemosPage(
   return memos.map(validateMemo);
 }
 
-export async function listAllMemos(
+export async function scanMemoPages(
   config: Pick<Config, "batchSize" | "feedTimeoutMs" | "feedUrl" | "googleAudience">,
+  onPage: (page: WatcherMemo[]) => Promise<void>,
   fetchImpl: typeof fetch = fetch,
   identityToken: () => Promise<string> = () => googleIdentityToken(config.googleAudience, config.feedTimeoutMs, fetchImpl),
-): Promise<WatcherMemo[]> {
-  const all: WatcherMemo[] = [];
+): Promise<void> {
   // transcribed_at is assigned before commit. No finite rewind can guarantee
   // discovery when a transaction commits after that rewind window. Rescan the
   // complete owner-scoped feed and deduplicate by the watch-generated UUID.
   let pageCursor = FIRST_CURSOR;
   for (;;) {
     const page = await listMemosPage(config, pageCursor, fetchImpl, identityToken);
-    all.push(...page);
-    if (page.length < config.batchSize) return all;
+    await onPage(page);
+    if (page.length < config.batchSize) return;
     pageCursor = page.at(-1)!;
   }
 }
@@ -755,7 +755,12 @@ export function pollIsStale(
   return lastSucceededMs + staleAfterMs < now;
 }
 
-async function pollMemos(config: Config, statePath: string, state: WatcherState): Promise<WatcherMemo[]> {
+async function pollMemos(
+  config: Config,
+  statePath: string,
+  state: WatcherState,
+  onPage: (page: WatcherMemo[]) => Promise<void>,
+): Promise<void> {
   state.poll = {
     ...state.poll,
     lastAttemptAt: timestamp(),
@@ -763,7 +768,11 @@ async function pollMemos(config: Config, statePath: string, state: WatcherState)
   };
   await writeState(statePath, state);
   try {
-    const memos = await listAllMemos(config);
+    await scanMemoPages(config, async (page) => {
+      discoverMemos(state, page);
+      await writeState(statePath, state);
+      await onPage(page);
+    });
     state.poll = {
       ...state.poll,
       lastSucceededAt: timestamp(),
@@ -771,9 +780,7 @@ async function pollMemos(config: Config, statePath: string, state: WatcherState)
       nextAttemptAt: undefined,
       error: undefined,
     };
-    discoverMemos(state, memos);
     await writeState(statePath, state);
-    return memos;
   } catch {
     const consecutiveFailures = (state.poll?.consecutiveFailures ?? 0) + 1;
     state.poll = {
@@ -975,9 +982,14 @@ async function watch(config: Config, statePath: string, once: boolean): Promise<
 
   try {
     do {
-      let memos: WatcherMemo[] = [];
+      if (!client?.compatibility().alive) {
+        await client?.close();
+        client = await startAppServer(config, statePath, state);
+      }
       try {
-        memos = await pollMemos(config, statePath, state);
+        await pollMemos(config, statePath, state, async (page) => {
+          if (client) await processDue(config, statePath, state, page, client);
+        });
       } catch {
         console.error(JSON.stringify({
           message: "watcher feed poll failed",
@@ -987,11 +999,6 @@ async function watch(config: Config, statePath: string, once: boolean): Promise<
         if (once) throw new Error("watcher feed poll failed");
       }
 
-      if (!client?.compatibility().alive) {
-        await client?.close();
-        client = await startAppServer(config, statePath, state);
-      }
-      if (client) await processDue(config, statePath, state, memos, client);
       if (!once) {
         const nextPoll = state.poll?.nextAttemptAt ? Date.parse(state.poll.nextAttemptAt) : Date.now() + config.pollMs;
         await Bun.sleep(Math.max(0, nextPoll - Date.now()));

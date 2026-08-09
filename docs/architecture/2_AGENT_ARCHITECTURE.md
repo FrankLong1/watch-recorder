@@ -60,7 +60,9 @@ The production cursor is an observable high-water mark, not a discovery
 boundary. Every poll pages through the complete owner-scoped feed from the
 beginning and deduplicates against the durable UUID ledger. A transaction that
 commits arbitrarily long after its timestamp was assigned is therefore found on
-the next poll; already submitted UUIDs are not re-created. Pending items
+the next poll; already submitted UUIDs are not re-created. The watcher persists
+and processes one page before fetching the next, keeping memory bounded even as
+history grows. Pending items
 re-fetch their transcript by UUID, so the watcher does not retain transcript
 text merely to retry.
 

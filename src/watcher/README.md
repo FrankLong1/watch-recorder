@@ -58,7 +58,9 @@ validation, and prompt boundary are the compensating controls.
 moves forward can skip a slow transaction that commits after a newer row. Each
 poll paginates the complete owner-scoped feed from the beginning and deduplicates
 by watch-generated UUID. This unbounded scan closes the commit-order hole even
-when a transaction remains open for an arbitrarily long time. An old
+when a transaction remains open for an arbitrarily long time. Each page is
+discovered, persisted, and processed before it is released, so transcript
+history is never accumulated in watcher memory. An old
 pending retry fetches its transcript by UUID, so transcript text does not need
 to be retained locally.
 
