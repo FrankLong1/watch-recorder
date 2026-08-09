@@ -5,11 +5,11 @@
 /// local app-server and is never written to watcher state or logs.
 
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { chmod, lstat, mkdir, readFile, realpath, rename, stat, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, open, readFile, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import readline from "node:readline";
 
-export const WATCHER_VERSION = "1.0.0";
+export const WATCHER_VERSION = "1.0.1";
 const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
 const FIRST_CURSOR: MemoCursor = {
   id: ZERO_UUID,
@@ -76,7 +76,6 @@ export interface Config {
   feedUrl: string;
   googleAudience: string;
   pollMs: number;
-  overlapMs: number;
   batchSize: number;
   maxAttempts: number;
   stateRoot: string;
@@ -247,7 +246,6 @@ export async function loadConfig(): Promise<Config> {
     feedUrl: validatedFeedUrl(required("WRISTMEMO_WATCHER_FEED_URL")),
     googleAudience: required("WRISTMEMO_GOOGLE_AUDIENCE"),
     pollMs: positiveInteger("WRISTMEMO_WATCHER_POLL_MS", 20_000),
-    overlapMs: positiveInteger("WRISTMEMO_WATCHER_CURSOR_OVERLAP_MS", 10 * 60_000),
     batchSize: positiveInteger("WRISTMEMO_WATCHER_BATCH_SIZE", 100),
     maxAttempts: positiveInteger("WRISTMEMO_WATCHER_MAX_ATTEMPTS", 5),
     stateRoot,
@@ -291,8 +289,21 @@ export async function readState(path: string): Promise<WatcherState> {
 export async function writeState(path: string, state: WatcherState): Promise<void> {
   const temporary = `${path}.${process.pid}.tmp`;
   state.watcherVersion = WATCHER_VERSION;
-  await writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
+  const temporaryHandle = await open(temporary, "w", 0o600);
+  try {
+    await temporaryHandle.chmod(0o600);
+    await temporaryHandle.writeFile(`${JSON.stringify(state, null, 2)}\n`);
+    await temporaryHandle.sync();
+  } finally {
+    await temporaryHandle.close();
+  }
   await rename(temporary, path);
+  const directoryHandle = await open(dirname(path), "r");
+  try {
+    await directoryHandle.sync();
+  } finally {
+    await directoryHandle.close();
+  }
 }
 
 export function appServerArgs(): string[] {
@@ -576,22 +587,16 @@ export async function listMemosPage(
   return memos.map(validateMemo);
 }
 
-export function overlapCursor(cursor: MemoCursor, overlapMs: number): MemoCursor {
-  if (cursor.transcribedAt === FIRST_CURSOR.transcribedAt) return FIRST_CURSOR;
-  return {
-    id: ZERO_UUID,
-    transcribedAt: new Date(Math.max(0, Date.parse(cursor.transcribedAt) - overlapMs)).toISOString(),
-  };
-}
-
-export async function listMemosWithOverlap(
-  config: Pick<Config, "batchSize" | "feedTimeoutMs" | "feedUrl" | "googleAudience" | "overlapMs">,
-  cursor: MemoCursor,
+export async function listAllMemos(
+  config: Pick<Config, "batchSize" | "feedTimeoutMs" | "feedUrl" | "googleAudience">,
   fetchImpl: typeof fetch = fetch,
   identityToken: () => Promise<string> = () => googleIdentityToken(config.googleAudience, config.feedTimeoutMs, fetchImpl),
 ): Promise<WatcherMemo[]> {
   const all: WatcherMemo[] = [];
-  let pageCursor = overlapCursor(cursor, config.overlapMs);
+  // transcribed_at is assigned before commit. No finite rewind can guarantee
+  // discovery when a transaction commits after that rewind window. Rescan the
+  // complete owner-scoped feed and deduplicate by the watch-generated UUID.
+  let pageCursor = FIRST_CURSOR;
   for (;;) {
     const page = await listMemosPage(config, pageCursor, fetchImpl, identityToken);
     all.push(...page);
@@ -758,7 +763,7 @@ async function pollMemos(config: Config, statePath: string, state: WatcherState)
   };
   await writeState(statePath, state);
   try {
-    const memos = await listMemosWithOverlap(config, state.cursor ?? FIRST_CURSOR);
+    const memos = await listAllMemos(config);
     state.poll = {
       ...state.poll,
       lastSucceededAt: timestamp(),
@@ -902,7 +907,7 @@ async function status(config: Config, statePath: string): Promise<void> {
     watcherVersion: WATCHER_VERSION,
     taskCwd: config.taskCwd,
     bootstrappedAt: state.bootstrappedAt ?? null,
-    cursorOverlapMs: config.overlapMs,
+    discoveryScan: "complete-owner-feed-with-uuid-dedupe",
     poll: state.poll ?? null,
     compatibility: state.compatibility ?? null,
     counts,
@@ -968,31 +973,35 @@ async function watch(config: Config, statePath: string, once: boolean): Promise<
   process.once("SIGTERM", shutdown);
   process.once("SIGINT", shutdown);
 
-  do {
-    let memos: WatcherMemo[] = [];
-    try {
-      memos = await pollMemos(config, statePath, state);
-    } catch {
-      console.error(JSON.stringify({
-        message: "watcher feed poll failed",
-        consecutiveFailures: state.poll?.consecutiveFailures ?? 1,
-        nextAttemptAt: state.poll?.nextAttemptAt ?? null,
-      }));
-      if (once) throw new Error("watcher feed poll failed");
-    }
+  try {
+    do {
+      let memos: WatcherMemo[] = [];
+      try {
+        memos = await pollMemos(config, statePath, state);
+      } catch {
+        console.error(JSON.stringify({
+          message: "watcher feed poll failed",
+          consecutiveFailures: state.poll?.consecutiveFailures ?? 1,
+          nextAttemptAt: state.poll?.nextAttemptAt ?? null,
+        }));
+        if (once) throw new Error("watcher feed poll failed");
+      }
 
-    if (!client?.compatibility().alive) {
-      await client?.close();
-      client = await startAppServer(config, statePath, state);
-    }
-    if (client) await processDue(config, statePath, state, memos, client);
-    if (!once) {
-      const nextPoll = state.poll?.nextAttemptAt ? Date.parse(state.poll.nextAttemptAt) : Date.now() + config.pollMs;
-      await Bun.sleep(Math.max(0, nextPoll - Date.now()));
-    }
-  } while (!once);
-
-  await client?.close();
+      if (!client?.compatibility().alive) {
+        await client?.close();
+        client = await startAppServer(config, statePath, state);
+      }
+      if (client) await processDue(config, statePath, state, memos, client);
+      if (!once) {
+        const nextPoll = state.poll?.nextAttemptAt ? Date.parse(state.poll.nextAttemptAt) : Date.now() + config.pollMs;
+        await Bun.sleep(Math.max(0, nextPoll - Date.now()));
+      }
+    } while (!once);
+  } finally {
+    process.off("SIGTERM", shutdown);
+    process.off("SIGINT", shutdown);
+    await client?.close();
+  }
 }
 
 async function main(): Promise<void> {

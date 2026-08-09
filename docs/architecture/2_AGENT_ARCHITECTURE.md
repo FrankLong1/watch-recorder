@@ -15,7 +15,7 @@ mechanism. There is no Pub/Sub and no custom WebSocket.
 flowchart LR
     DB[("Postgres\nowner-scoped transcript")]
     FEED["Cloud Run watcher feed\nservice identity + one owner"]
-    POLL["Image-owned watcher\n20 s poll + 10 min overlap"]
+    POLL["Image-owned watcher\n20 s complete owner-feed scan"]
     LEDGER[("Retained private ledger\nUUID + thread/turn state only")]
     APP["One long-lived local\nCodex app-server over stdio"]
     TASK["Visible Codex task\nread-only automatic first turn"]
@@ -56,20 +56,23 @@ earlier timestamp can commit after the watcher has observed and advanced past a
 newer transaction. A strict `(transcribed_at, id) > cursor` poll can therefore
 skip a committed memo.
 
-The production cursor is a durable high-water mark, not a destructive claim.
-Every poll starts ten minutes before it, pages through the complete overlap,
-and deduplicates against the durable UUID ledger. A delayed commit inside the
-overlap is found on the next poll; already submitted UUIDs are not re-created.
-Pending items older than the overlap re-fetch their transcript by UUID, so the
-watcher does not retain transcript text merely to retry.
+The production cursor is an observable high-water mark, not a discovery
+boundary. Every poll pages through the complete owner-scoped feed from the
+beginning and deduplicates against the durable UUID ledger. A transaction that
+commits arbitrarily long after its timestamp was assigned is therefore found on
+the next poll; already submitted UUIDs are not re-created. Pending items
+re-fetch their transcript by UUID, so the watcher does not retain transcript
+text merely to retry.
 
-This is intentionally at-least-once discovery plus local dedupe. The overlap is
-runtime-configurable and observable in status.
+This is intentionally at-least-once complete discovery plus local dedupe. The
+full rescan is observable in status and favors correctness over an unsafe
+finite cursor window.
 
 ## Durable task state and duplicate protection
 
-Each UUID has one atomic ledger record. The watcher persists boundaries before
-crossing them:
+Each UUID has one atomic ledger record. State replacement fsyncs both the new
+file and its containing directory. The watcher durably persists boundaries
+before crossing them:
 
 ```mermaid
 stateDiagram-v2
@@ -125,9 +128,9 @@ in-progress turn ID. The watcher does not wait for the model to finish and does
 not terminate a realistic turn on a task timeout. It continues polling and can
 submit later memos while prior read-only turns run.
 
-The app-server's stderr is drained and discarded. It is stopped only with the
-watcher service or after process failure; the supervisor restarts the whole
-controlled pair.
+The app-server's stderr is drained and discarded. A `finally` boundary closes
+it on normal shutdown and every exceptional watcher exit; the supervisor then
+restarts the whole controlled pair.
 
 ## Desktop visibility compatibility
 
@@ -144,7 +147,7 @@ the pin is updated.
 
 ## Image/runtime ownership
 
-This repository owns a versioned `1.0.0` payload and image-layer installer:
+This repository owns a versioned `1.0.1` payload and image-layer installer:
 
 ```text
 src/watcher/VERSION

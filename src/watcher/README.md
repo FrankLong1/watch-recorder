@@ -1,6 +1,6 @@
 # WristMemo transcript-to-Codex watcher
 
-Version `1.0.0` is the production polling architecture. Every new, non-empty
+Version `1.0.1` is the production polling architecture. Every new, non-empty
 memo for one explicitly configured owner creates one visible Codex task in one
 explicitly configured project folder. The transcript is the task input.
 
@@ -56,12 +56,14 @@ validation, and prompt boundary are the compensating controls.
 
 `transcribed_at` is assigned before transaction commit, so a cursor that only
 moves forward can skip a slow transaction that commits after a newer row. Each
-poll starts ten minutes behind the durable high-water cursor and deduplicates by
-watch-generated UUID. Pagination walks the complete overlap window. An old
+poll paginates the complete owner-scoped feed from the beginning and deduplicates
+by watch-generated UUID. This unbounded scan closes the commit-order hole even
+when a transaction remains open for an arbitrarily long time. An old
 pending retry fetches its transcript by UUID, so transcript text does not need
 to be retained locally.
 
-State is atomically replaced with mode `0600`. The task boundary is recorded in
+State is atomically replaced with mode `0600`; each replacement fsyncs the file
+and containing directory before an RPC boundary may be crossed. The task boundary is recorded in
 this order:
 
 1. persist `threadRequestStartedAt`;
@@ -136,7 +138,7 @@ The external image definition that must consume it is:
 frank-vm-sandbox/container-images/demo-workstation-image/profiles/frank/
 ```
 
-That repository's Frank-only profile vendors `wristmemo-watcher-1.0.0.tar.gz`
+That repository's Frank-only profile vendors `wristmemo-watcher-1.0.1.tar.gz`
 plus its SHA-256 receipt. Its Dockerfile verifies both the receipt and pinned
 digest before extraction, runs `image/install-image-layer.sh`, and then runs
 the profile smoke test. The profile manifest and image-contract tests keep the

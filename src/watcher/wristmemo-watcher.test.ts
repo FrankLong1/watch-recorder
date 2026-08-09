@@ -10,10 +10,9 @@ import {
   codexChildEnvironment,
   discoverMemos,
   googleIdentityToken,
+  listAllMemos,
   listMemosPage,
-  listMemosWithOverlap,
   markInterrupted,
-  overlapCursor,
   pollIsStale,
   processDue,
   readState,
@@ -220,17 +219,13 @@ sleep 5
     }
   });
 
-  test("overlaps the cursor so a later commit with an earlier timestamp is discovered once", () => {
+  test("deduplicates a commit that appears arbitrarily far behind the high-water cursor", () => {
     const current = state();
     const later = { id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", transcribedAt: "2026-08-08T10:05:00.000Z", transcript: "later" };
     discoverMemos(current, [later], "2026-08-08T10:05:01.000Z");
     current.memos[later.id].status = "succeeded";
-    expect(overlapCursor(current.cursor!, 10 * 60_000)).toEqual({
-      id: "00000000-0000-0000-0000-000000000000",
-      transcribedAt: "2026-08-08T09:55:00.000Z",
-    });
 
-    const delayed = { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", transcribedAt: "2026-08-08T10:04:00.000Z", transcript: "delayed commit" };
+    const delayed = { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", transcribedAt: "2026-08-07T10:04:00.000Z", transcript: "delayed commit" };
     discoverMemos(current, [delayed, later], "2026-08-08T10:06:00.000Z");
     expect(Object.keys(current.memos)).toHaveLength(2);
     expect(current.memos[delayed.id].status).toBe("pending");
@@ -238,7 +233,7 @@ sleep 5
     expect(current.cursor).toEqual({ id: later.id, transcribedAt: later.transcribedAt });
   });
 
-  test("paginates the complete overlap window", async () => {
+  test("paginates the complete owner feed from the beginning", async () => {
     const ids = [
       "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
       "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
@@ -257,19 +252,15 @@ sleep 5
       }));
       return Response.json({ memos });
     }) as typeof fetch;
-    const memos = await listMemosWithOverlap({
+    const memos = await listAllMemos({
       feedUrl: "https://watcher.example",
       googleAudience: "audience",
       feedTimeoutMs: 1_000,
       batchSize: 2,
-      overlapMs: 10 * 60_000,
-    }, {
-      id: ids[2],
-      transcribedAt: "2026-08-08T10:03:00.000Z",
     }, feed, async () => "header.payload.signature");
     expect(memos.map((memo) => memo.id)).toEqual(ids);
     expect(requestedAfter).toEqual([
-      "2026-08-08T09:53:00.000Z",
+      "1970-01-01T00:00:00.000Z",
       "2026-08-08T10:01:00.000Z",
     ]);
   });
@@ -298,7 +289,6 @@ sleep 5
       feedUrl: "https://watcher.example",
       googleAudience: "audience",
       pollMs: 20_000,
-      overlapMs: 600_000,
       batchSize: 100,
       maxAttempts: 1,
       stateRoot: directory,
