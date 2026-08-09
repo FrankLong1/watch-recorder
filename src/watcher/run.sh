@@ -6,7 +6,6 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 : "${WRISTMEMO_WATCHER_FEED_URL:?Set the Cloud Run watcher feed URL.}"
 : "${WRISTMEMO_GOOGLE_AUDIENCE:?Set the Google OAuth server client ID.}"
 : "${WRISTMEMO_WATCHER_TASK_CWD:?Set the exact absolute project folder.}"
-: "${WRISTMEMO_WATCHER_DESKTOP_DISCOVERY_CODEX_VERSION:?Set the manually verified Codex version.}"
 
 STATE_DIR="${WRISTMEMO_WATCHER_STATE_DIR:-${HOME}/.local/state/wristmemo-watcher}"
 mkdir -p "${STATE_DIR}"

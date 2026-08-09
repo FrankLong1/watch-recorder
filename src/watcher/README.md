@@ -1,6 +1,6 @@
 # WristMemo transcript-to-Codex watcher
 
-Version `1.0.2` is the production polling architecture. Every new, non-empty
+Version `1.0.3` is the production polling architecture. Every new, non-empty
 memo for one explicitly configured owner creates one visible Codex task in one
 explicitly configured project folder. The transcript is the task input.
 
@@ -101,14 +101,12 @@ guide documents the desktop app starting its own remote app-server over SSH; it
 does not document discovery of threads made by an independent process. That
 last step remains a manually verified compatibility dependency.
 
-Runtime config must set
-`WRISTMEMO_WATCHER_DESKTOP_DISCOVERY_CODEX_VERSION` to the exact Codex version
-for which discovery was manually tested. Startup initializes app-server,
-matches its returned user agent to that pinned version, and exercises
-`thread/list`. A version mismatch or protocol failure makes compatibility and
-overall status unhealthy and prevents submission until re-verified. This check
-proves protocol/storage compatibility; the version pin records the separate
-manual desktop-visibility proof.
+Startup initializes the image-provided Codex app-server, records its returned
+user agent, and exercises `thread/list`. Codex upgrades are accepted when those
+required operations still work. A protocol failure makes compatibility and
+overall status unhealthy and prevents submission. This proves protocol/storage
+compatibility; cross-process desktop visibility remains an experimental manual
+acceptance check after an image rollout.
 
 ## Image and retained runtime contract
 
@@ -124,7 +122,7 @@ Immutable image-owned files:
 Retained user-owned files:
 
 ```text
-~/.config/wristmemo-watcher/watcher.env   mode 0600; URLs, audience, project path, version pin
+~/.config/wristmemo-watcher/watcher.env   mode 0600; URLs, audience, project path
 ~/.local/state/wristmemo-watcher/         mode 0700; ledger, lock, PIDs, private log
 ```
 
@@ -142,7 +140,7 @@ The external image definition that must consume it is:
 frank-vm-sandbox/container-images/demo-workstation-image/profiles/frank/
 ```
 
-That repository's Frank-only profile vendors `wristmemo-watcher-1.0.2.tar.gz`
+That repository's Frank-only profile vendors `wristmemo-watcher-1.0.3.tar.gz`
 plus its SHA-256 receipt. Its Dockerfile verifies both the receipt and pinned
 digest before extraction, runs `image/install-image-layer.sh`, and then runs
 the profile smoke test. The profile manifest and image-contract tests keep the
@@ -173,8 +171,7 @@ chmod 700 ~/.config/wristmemo-watcher
 cp /opt/wristmemo-watcher/current/watcher.env.example \
   ~/.config/wristmemo-watcher/watcher.env
 chmod 600 ~/.config/wristmemo-watcher/watcher.env
-# Edit the private file with the real feed URL, audience, exact project folder,
-# and manually verified Codex version.
+# Edit the private file with the real feed URL, audience, and exact project folder.
 source ~/.config/wristmemo-watcher/watcher.env
 /opt/wristmemo-watcher/current/run.sh --bootstrap
 wristmemo-watcher-service install

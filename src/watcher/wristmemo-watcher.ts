@@ -9,7 +9,7 @@ import { chmod, lstat, mkdir, open, readFile, realpath, rename, stat, writeFile 
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import readline from "node:readline";
 
-export const WATCHER_VERSION = "1.0.2";
+export const WATCHER_VERSION = "1.0.3";
 const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
 const FIRST_CURSOR: MemoCursor = {
   id: ZERO_UUID,
@@ -47,9 +47,9 @@ interface PollState {
 interface CompatibilityState {
   checkedAt: string;
   ok: boolean;
-  expectedCodexVersion: string;
   appServerUserAgent?: string;
-  desktopDiscovery: "experimental-manually-verified";
+  protocolCheck: "initialize+thread/list";
+  desktopDiscovery: "experimental-runtime-checked";
   error?: string;
 }
 
@@ -84,7 +84,6 @@ export interface Config {
   taskCwd: string;
   rpcTimeoutMs: number;
   feedTimeoutMs: number;
-  expectedCodexVersion: string;
 }
 
 interface RpcMessage {
@@ -219,12 +218,6 @@ export function validatedFeedUrl(raw: string): string {
   return url.toString().replace(/\/$/, "");
 }
 
-export function codexUserAgentMatchesVersion(userAgent: string, expectedVersion: string): boolean {
-  if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(expectedVersion)) return false;
-  const escaped = expectedVersion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(^|[^0-9A-Za-z.+-])${escaped}($|[^0-9A-Za-z.+-])`).test(userAgent);
-}
-
 /// The app-server must share the operator's Codex home for the experimental
 /// desktop discovery path, but it receives no cloud/service credentials.
 export function codexChildEnvironment(source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
@@ -257,7 +250,6 @@ export async function loadConfig(): Promise<Config> {
     }),
     rpcTimeoutMs: positiveInteger("WRISTMEMO_WATCHER_RPC_TIMEOUT_MS", 30_000),
     feedTimeoutMs: positiveInteger("WRISTMEMO_WATCHER_FEED_TIMEOUT_MS", 10_000),
-    expectedCodexVersion: required("WRISTMEMO_WATCHER_DESKTOP_DISCOVERY_CODEX_VERSION"),
   };
 }
 
@@ -376,7 +368,7 @@ export class AppServerClient {
   private healthy = false;
   private userAgent?: string;
 
-  constructor(private readonly config: Pick<Config, "codexBin" | "expectedCodexVersion" | "rpcTimeoutMs" | "taskCwd">) {}
+  constructor(private readonly config: Pick<Config, "codexBin" | "rpcTimeoutMs" | "taskCwd">) {}
 
   async start(): Promise<{ userAgent: string }> {
     if (this.child) throw new AppServerFailure("duplicate initialization");
@@ -403,12 +395,14 @@ export class AppServerClient {
     });
     this.send({ method: "initialized", params: {} });
     const userAgent = initialized.result?.userAgent;
-    if (typeof userAgent !== "string"
-        || !codexUserAgentMatchesVersion(userAgent, this.config.expectedCodexVersion)) {
-      throw new AppServerFailure("desktop-discovery version compatibility check");
+    if (typeof userAgent !== "string" || userAgent.trim().length === 0) {
+      throw new AppServerFailure("desktop-discovery initialize compatibility check");
     }
     this.userAgent = userAgent;
-    await this.request("thread/list", { limit: 1, cwd: this.config.taskCwd });
+    const listed = await this.request("thread/list", { limit: 1, cwd: this.config.taskCwd });
+    if (!Array.isArray(listed.result?.data)) {
+      throw new AppServerFailure("thread/list compatibility check");
+    }
     this.healthy = true;
     return { userAgent };
   }
@@ -810,10 +804,10 @@ async function setCompatibility(
   state.compatibility = {
     checkedAt: timestamp(),
     ok,
-    expectedCodexVersion: config.expectedCodexVersion,
     appServerUserAgent: userAgent,
-    desktopDiscovery: "experimental-manually-verified",
-    error: ok ? undefined : "Codex app-server or pinned desktop-discovery compatibility check failed",
+    protocolCheck: "initialize+thread/list",
+    desktopDiscovery: "experimental-runtime-checked",
+    error: ok ? undefined : "Codex app-server desktop-discovery protocol check failed",
   };
   await writeState(statePath, state);
 }
@@ -982,9 +976,9 @@ async function healthcheck(config: Config, statePath: string): Promise<void> {
     console.log(JSON.stringify({
       healthy: true,
       watcherVersion: WATCHER_VERSION,
-      expectedCodexVersion: config.expectedCodexVersion,
       appServerUserAgent: client.compatibility().userAgent,
-      desktopDiscovery: "experimental-manually-verified",
+      protocolCheck: "initialize+thread/list",
+      desktopDiscovery: "experimental-runtime-checked",
     }));
   } finally {
     await client.close();

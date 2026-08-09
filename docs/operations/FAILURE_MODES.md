@@ -233,7 +233,7 @@ this replaces the earlier live wiring proof.
 | Watcher stops after a thread ID but before a turn request | It resumes the known thread and sends the transcript without creating a second visible task | 🟡 |
 | Watcher stops after `turn/start` may have been sent | It never starts another task or automatically resends the turn. The human inspects/continues the existing task | 🔵 |
 | A realistic read-only turn runs longer than one poll | Submission finishes when `turn/start` is accepted; one long-lived app-server keeps the turn alive while polling continues | 🟡 |
-| Codex upgrade breaks desktop discovery | Runtime pins the manually verified Codex version. Initialize/user-agent and `thread/list` checks fail health visibly until desktop discovery is re-verified | 🔵 |
+| Codex upgrade breaks desktop discovery | Runtime records the image-provided Codex user agent and exercises `initialize` plus `thread/list`. Compatible upgrades continue; a protocol failure makes health visibly red and prevents submission. Cross-process desktop visibility is rechecked manually after rollout | 🔵 |
 | Another user's transcript reaches the workstation | Every watcher query includes one configured owner ID in addition to service authorization; multi-user isolation tests exercise this boundary | 🔵 |
 | Transcript appears in watcher state/logs/errors | State contains only metadata; app-server stderr is discarded; watcher errors are generic; leakage tests use sentinel transcript strings | 🔵 |
 | Audio reaches the workstation | No watcher endpoint or payload contains audio; only text crosses from Cloud Run | 🔵 |

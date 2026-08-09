@@ -143,15 +143,15 @@ discovery of a thread created by a separate app-server process is not a
 documented task-creation API. The watcher therefore treats it as an explicit,
 experimental compatibility dependency.
 
-Runtime config pins the manually verified Codex CLI version. Health starts the
-server, validates the returned user agent, and exercises `thread/list` against
-the exact project. A version change or protocol failure makes health red and
-prevents task submission until desktop visibility is manually re-verified and
-the pin is updated.
+Health starts the image-provided Codex server, records its returned user agent,
+and exercises `thread/list` against the exact project. A version change is
+accepted when the required protocol still works. A protocol failure makes
+health red and prevents task submission; desktop visibility remains a manual
+post-rollout acceptance check because cross-process discovery is experimental.
 
 ## Image/runtime ownership
 
-This repository owns a versioned `1.0.2` payload and image-layer installer:
+This repository owns a versioned `1.0.3` payload and image-layer installer:
 
 ```text
 src/watcher/VERSION

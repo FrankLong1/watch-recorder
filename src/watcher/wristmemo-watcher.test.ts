@@ -6,7 +6,6 @@ import {
   AppServerClient,
   WATCHER_VERSION,
   appServerArgs,
-  codexUserAgentMatchesVersion,
   codexChildEnvironment,
   discoverMemos,
   googleIdentityToken,
@@ -119,7 +118,6 @@ sleep 5
 `, { mode: 0o700 });
       const client = new AppServerClient({
         codexBin: fakeCodex,
-        expectedCodexVersion: "0.145.0",
         rpcTimeoutMs: 2_000,
         taskCwd: directory,
       });
@@ -142,35 +140,80 @@ sleep 5
     }
   });
 
-  test("fails compatibility health when Codex no longer matches the manually verified version", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "wristmemo-version-"));
+  test("accepts a newer Codex version when the required app-server protocol still works", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "wristmemo-version-forward-"));
     const fakeCodex = join(directory, "codex");
     try {
       await writeFile(fakeCodex, `#!/usr/bin/env bash
 set -euo pipefail
 IFS= read -r initialize
-printf '%s\n' '{"id":1,"result":{"userAgent":"codex-cli 0.146.0"}}'
+printf '%s\n' '{"id":1,"result":{"userAgent":"codex-cli 99.0.0"}}'
 IFS= read -r initialized
+IFS= read -r thread_list
+printf '%s\n' '{"id":2,"result":{"data":[]}}'
 sleep 5
 `, { mode: 0o700 });
       const client = new AppServerClient({
         codexBin: fakeCodex,
-        expectedCodexVersion: "0.145.0",
         rpcTimeoutMs: 1_000,
         taskCwd: directory,
       });
-      await expect(client.start()).rejects.toThrow("compatibility");
+      await expect(client.start()).resolves.toEqual({ userAgent: "codex-cli 99.0.0" });
+      expect(client.compatibility()).toEqual({ userAgent: "codex-cli 99.0.0", alive: true });
       await client.close();
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
   });
 
-  test("matches only the exact pinned Codex version token", () => {
-    expect(codexUserAgentMatchesVersion("codex-cli 0.145.0", "0.145.0")).toBe(true);
-    expect(codexUserAgentMatchesVersion("codex_cli_rs/0.145.0 (unix)", "0.145.0")).toBe(true);
-    expect(codexUserAgentMatchesVersion("codex-cli 0.145.0-alpha.1", "0.145.0")).toBe(false);
-    expect(codexUserAgentMatchesVersion("codex-cli 0.145.0", "0.14")).toBe(false);
+  test("fails compatibility health when a Codex upgrade breaks thread/list", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "wristmemo-protocol-break-"));
+    const fakeCodex = join(directory, "codex");
+    try {
+      await writeFile(fakeCodex, `#!/usr/bin/env bash
+set -euo pipefail
+IFS= read -r initialize
+printf '%s\n' '{"id":1,"result":{"userAgent":"codex-cli 99.0.0"}}'
+IFS= read -r initialized
+IFS= read -r thread_list
+printf '%s\n' '{"id":2,"error":{"code":-32601,"message":"method removed"}}'
+sleep 5
+`, { mode: 0o700 });
+      const client = new AppServerClient({
+        codexBin: fakeCodex,
+        rpcTimeoutMs: 1_000,
+        taskCwd: directory,
+      });
+      await expect(client.start()).rejects.toThrow("request failed");
+      await client.close();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("fails compatibility health when thread/list returns a malformed success", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "wristmemo-protocol-shape-"));
+    const fakeCodex = join(directory, "codex");
+    try {
+      await writeFile(fakeCodex, `#!/usr/bin/env bash
+set -euo pipefail
+IFS= read -r initialize
+printf '%s\n' '{"id":1,"result":{"userAgent":"codex-cli 99.0.0"}}'
+IFS= read -r initialized
+IFS= read -r thread_list
+printf '%s\n' '{"id":2,"result":{"threads":[]}}'
+sleep 5
+`, { mode: 0o700 });
+      const client = new AppServerClient({
+        codexBin: fakeCodex,
+        rpcTimeoutMs: 1_000,
+        taskCwd: directory,
+      });
+      await expect(client.start()).rejects.toThrow("thread/list compatibility check");
+      await client.close();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   test("writes a private atomic v2 state ledger and upgrades v1 without text", async () => {
@@ -301,7 +344,6 @@ sleep 5
       taskCwd: project,
       rpcTimeoutMs: 30_000,
       feedTimeoutMs: 10_000,
-      expectedCodexVersion: "0.145.0",
     } satisfies Config;
     try {
       await processDue(config, path, current, [first, second], client);
