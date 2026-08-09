@@ -143,6 +143,7 @@ is only the optional faster path when the direct Watch tunnel is healthy.
 ```
 src/swift_app/   the Xcode project and all Apple-target source
 src/server/      Cloud Run ingest service, migrations, and Terraform
+src/watcher/     owner-scoped transcript polling into read-only Codex tasks
 scripts/         simulator, device, deployment, and icon tooling
 docs/            product, architecture, operations, research, and reviews
 ```

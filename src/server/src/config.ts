@@ -35,6 +35,7 @@ export interface Config {
   googleOAuthClientId: string;
   googleAllowedUserSubjects: string[];
   googleWatcherServiceAccounts: string[];
+  googleWatcherOwnerSubject: string;
   openaiApiKey: string;
   openaiBaseUrl: string;
   openaiModel: string;
@@ -65,11 +66,17 @@ function databaseConfig(): DatabaseConfig {
 }
 
 export function loadConfig(): Config {
+  const googleAllowedUserSubjects = requiredList("GOOGLE_ALLOWED_USER_SUBJECTS");
+  const googleWatcherOwnerSubject = required("GOOGLE_WATCHER_OWNER_SUBJECT");
+  if (!googleAllowedUserSubjects.includes(googleWatcherOwnerSubject)) {
+    throw new Error("GOOGLE_WATCHER_OWNER_SUBJECT must also be present in GOOGLE_ALLOWED_USER_SUBJECTS");
+  }
   return {
     port: positiveInt("PORT", 8080),
     googleOAuthClientId: required("GOOGLE_OAUTH_CLIENT_ID"),
-    googleAllowedUserSubjects: requiredList("GOOGLE_ALLOWED_USER_SUBJECTS"),
+    googleAllowedUserSubjects,
     googleWatcherServiceAccounts: requiredList("GOOGLE_WATCHER_SERVICE_ACCOUNTS"),
+    googleWatcherOwnerSubject,
     openaiApiKey: required("OPENAI_API_KEY"),
     openaiBaseUrl: optional("OPENAI_BASE_URL", "https://api.openai.com/v1"),
     openaiModel: optional("OPENAI_MODEL", "gpt-4o-transcribe"),

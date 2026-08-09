@@ -42,15 +42,18 @@ app.get("/readyz", async (c) => {
   }
 });
 
-// A metadata-only feed for the workstation watcher. It deliberately returns
-// neither audio nor transcript text, even though both exist upstream of here.
+// The watcher is a distinct trusted transcript-retention surface. Its service
+// identity is allowlisted and its database query is pinned to one configured
+// memo owner; audio never crosses this boundary.
 registerWatcherFeed(app, {
   store,
   log,
   authorize: async (authorization) => {
     const principal = await identities.verifyAuthorization(authorization, config.googleOAuthClientId);
     if (!principal) return "unauthorized";
-    return isAllowedService(principal, config.googleWatcherServiceAccounts) ? "authorized" : "forbidden";
+    return isAllowedService(principal, config.googleWatcherServiceAccounts)
+      ? { userId: `google:${config.googleWatcherOwnerSubject}` }
+      : "forbidden";
   },
 });
 

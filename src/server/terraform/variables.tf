@@ -87,7 +87,7 @@ variable "watcher_service_account_email" {
 }
 
 variable "google_watcher_service_accounts" {
-  description = "Additional Google service-account emails allowed to read the metadata-only watcher feed."
+  description = "Additional Google service-account emails allowed to read the single-owner transcript watcher feed."
   type        = list(string)
   default     = []
 
@@ -97,6 +97,17 @@ variable "google_watcher_service_accounts" {
       can(regex("^[^@[:space:]]+@[^@[:space:]]+[.]gserviceaccount[.]com$", email))
     ])
     error_message = "Every google_watcher_service_accounts entry must be a service-account email."
+  }
+}
+
+variable "google_watcher_owner_subject" {
+  description = "The one immutable Google OIDC subject whose non-empty transcripts the workstation watcher may read."
+  type        = string
+  nullable    = false
+
+  validation {
+    condition     = length(trimspace(var.google_watcher_owner_subject)) > 0
+    error_message = "google_watcher_owner_subject must be set to one Google OIDC subject."
   }
 }
 

@@ -29,7 +29,8 @@ export function transcriptLimit(raw: string | undefined): number | null {
 ///
 /// The API authenticates the person who recorded the memo and filters by their
 /// immutable Google subject-derived database identity before selecting text.
-/// The workstation watcher keeps its separate, metadata-only endpoint.
+/// The workstation watcher keeps a separate endpoint scoped to one configured
+/// owner and its own trusted service identity.
 export function registerTranscriptFeed(
   app: Hono,
   options: { authorize: TranscriptAuthorization; store: TranscriptStore; log: TranscriptLog },

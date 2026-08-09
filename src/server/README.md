@@ -20,9 +20,10 @@ The short version:
 - **Separate capture and review paths.** The upload response remains status
   only; the signed-in owner later pulls their text-only transcript history into
   the phone's protected local cache. Audio never comes back from Cloud Run.
-- **Watcher feed.** The remote Codex wiring watcher reads only memo UUIDs and
-  transcription timestamps using its attached Google service-account identity;
-  it never receives audio or transcript text.
+- **Owner-scoped watcher feed.** The remote watcher reads UUID, transcription
+  time, and non-empty transcript text for exactly one configured owner using
+  its attached Google service-account identity. It never receives audio or
+  another user's transcript.
 - **It attaches to infrastructure that already exists** — a Cloud SQL instance
   owned by a separate, private project. This configuration reads that instance
   through a data source and never manages it.
@@ -38,7 +39,7 @@ src/
   db.ts           Cloud SQL over the /cloudsql socket, IAM auth
   routing.ts      spoken routing prefix (IDEAS.md §2)
   config.ts       environment parsing, fails fast at boot
-  watcher-feed.ts metadata-only watcher endpoint and cursor validation
+  watcher-feed.ts owner-scoped transcript watcher endpoint and cursor validation
 migrations/       ordered SQL, checksum-guarded by scripts/migrate.sh
 terraform/        database, identity, secrets, image repo, Cloud Run service
 ```
@@ -67,11 +68,15 @@ POST /v1/memos/{id}
 GET /v1/watcher/memos?after=<ISO timestamp>&after_id=<uuid>&limit=<1..500>
   Authorization: Bearer <Google service-account ID token>
 
-  → { "memos": [{ "id": "…", "transcribedAt": "…" }] }
+  → { "memos": [{ "id": "…", "transcribedAt": "…", "transcript": "…" }] }
 ```
 
-The watcher feed contains only memo identity and completion time. It does not
-return audio, transcript, route, or other derived content.
+The watcher identity is allowlisted, and every query is additionally pinned to
+`GOOGLE_WATCHER_OWNER_SUBJECT`. The feed excludes empty transcripts and never
+returns audio, routes, or another user's content. `GET /v1/watcher/memos/{id}`
+uses the same owner scope so an old pending retry can re-fetch text without
+retaining it in workstation watcher state. Server startup fails unless that
+owner is also present in `GOOGLE_ALLOWED_USER_SUBJECTS`.
 
 ```
 GET /v1/memos?after=<ISO timestamp>&after_id=<uuid>&limit=<1..200>
@@ -84,8 +89,8 @@ GET /v1/memos?after=<ISO timestamp>&after_id=<uuid>&limit=<1..200>
 
 The history endpoint is read-only and filters every query by the authenticated
 Google subject-derived user ID. It is deliberately distinct from the watcher
-feed: workstation agents receive metadata only, while the phone owner receives
-their own transcript text and never audio.
+feed: the phone proves the owner interactively; the workstation proves its
+service identity and is pinned to one configured owner. Neither receives audio.
 
 **Raw body, not multipart.** A background `URLSession` on iOS can only upload
 *from a file*; with a raw body `uploadTask(with:fromFile:)` points straight at
@@ -127,6 +132,7 @@ DATABASE_URL="postgres://wristmemo_local:dev@localhost:55432/wristmemo" \
 GOOGLE_OAUTH_CLIENT_ID=000000000000-example.apps.googleusercontent.com \
 GOOGLE_ALLOWED_USER_SUBJECTS=allowed-google-subject \
 GOOGLE_WATCHER_SERVICE_ACCOUNTS=WATCHER_SERVICE_ACCOUNT_EMAIL \
+GOOGLE_WATCHER_OWNER_SUBJECT=allowed-google-subject \
 OPENAI_API_KEY=... PORT=8787 \
   bun run src/index.ts
 ```
@@ -154,7 +160,7 @@ before there is anything to deploy.
 human account that will impersonate the migrator in step 3. `terraform plan`
 fails asking for it otherwise.
 
-The deployed workstation watcher uses only the metadata-only HTTPS feed above.
+The deployed workstation watcher uses only the owner-scoped HTTPS feed above.
 The retired direct-Cloud-SQL experiment is revoked by migration 0004 and the
 workstation receives no Cloud SQL IAM permissions. Runtime setup lives in
 [`../watcher/README.md`](../watcher/README.md).

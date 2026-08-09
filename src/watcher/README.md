@@ -1,145 +1,206 @@
-# WristMemo Codex desktop watcher
+# WristMemo transcript-to-Codex watcher
 
-This is the deliberately harmless WristMemo → workstation → Codex desktop
-integration. Once a memo has been transcribed and committed to Cloud SQL, the
-watcher creates one normal, interactive Codex task in `/home/user` and asks it
-only:
+Version `1.0.0` is the production polling architecture. Every new, non-empty
+memo for one explicitly configured owner creates one visible Codex task in one
+explicitly configured project folder. The transcript is the task input.
 
-```text
-Reply with exactly: hello world
-```
-
-It never receives audio, transcript text, summaries, routes, or other memo
-content.
+The automatic first turn is deliberately read-only. It may inspect the project
+and produce an answer, plan, or draft, but it runs with a read-only sandbox,
+network disabled, approval policy `never`, MCP configuration emptied, and an
+instruction not to invoke plugins, apps, MCP, or skills. A human continuation
+in the visible task is the approval boundary for edits and consequential work.
 
 ```text
-watch → phone → Cloud Run transcription → Cloud SQL row
-                                          │
-                                          ▼
-                    metadata-only HTTPS feed → workstation watcher
-                                                │
-                                                ▼
-                         local Codex app-server over stdio
-                                                │
-                                                ▼
-                         interactive task in the Codex desktop app
+watch -> phone -> Cloud Run transcription -> owner-scoped Postgres row
+                                              |
+                                              v
+                    transcript HTTPS feed -> polling watcher (20 s)
+                                              |
+                                              v
+                         one long-lived local Codex app-server over stdio
+                                              |
+                                              v
+                         visible, interactive task in the configured project
 ```
 
-## Experimental app-visibility boundary
+There is no Pub/Sub, custom WebSocket, workstation Cloud SQL access, or audio
+path. Polling is authoritative.
 
-`codex exec` is non-interactive automation. It can persist CLI history, but it
-does not create a task owned by the desktop app's remote-project session.
+## Trust and retention boundaries
 
-The watcher starts `codex app-server --stdio` as a short-lived local child and
-performs the documented app-server `initialize` → `thread/start` → `turn/start`
-flow. A real end-to-end test proved that the resulting non-ephemeral thread is
-currently discovered by the desktop app's saved SSH project and can be steered
-there. No TCP, WebSocket, or Unix listener is opened by the watcher.
+The service-account feed is bound at server startup to exactly one immutable
+Google owner subject. Every list and UUID re-fetch query includes that owner's
+derived database identity. A valid watcher identity therefore cannot retrieve
+another user's transcript.
 
-That discovery is a compatibility proof, not a documented desktop task-creation
-API. The official [App Server](https://learn.chatgpt.com/docs/app-server) guide
-positions the protocol as the foundation for rich clients and directs job
-automation to the SDK. The official
-[Remote connections](https://learn.chatgpt.com/docs/remote-connections) guide
-documents the desktop app starting and managing its own remote app server; it
-does not promise discovery of threads created by an independent process. Keep
-this stage harmless, monitor it after Codex upgrades, and fall back to a visible
-metadata queue if that compatibility behavior stops working.
+Transcript text exists in these places after transcription:
 
-The SSH host and `/home/user` must first be saved in Codex desktop as described
-in the official [Remote connections](https://learn.chatgpt.com/docs/remote-connections)
-guide. Failures before `thread/start` is sent remain `pending` and retry with
-exponential backoff. Once the request may have reached app-server, the record is
-`interrupted` even if no thread ID returned: the operator must inspect recent
-tasks before explicitly confirming that a retry is safe. This closes the
-automatic duplicate window without pretending the two systems share an atomic
-transaction.
+- Postgres, as the durable transcript;
+- the owner's protected phone transcript cache;
+- transient watcher process memory while a task is submitted; and
+- the visible Codex thread history and model-provider processing implied by
+  running that task.
 
-## Privacy and access
+The watcher never stores transcript text in its ledger or logs and discards
+app-server stderr. It receives no audio. The ledger stores only UUIDs,
+timestamps, attempts, health, and thread/turn IDs.
 
-The remote workstation does not connect to Cloud SQL directly. Cloud Run
-exposes a Google-identity-protected feed containing only memo UUIDs and
-transcription timestamps. The watcher obtains a short-lived, audience-bound ID
-token for its attached service account from the Google metadata server. There
-is no downloaded key or persistent watcher secret. The task prompt is fixed in
-source and is never constructed from memo data.
+The Codex child receives an explicit environment allowlist, so Google tokens
+and unrelated service environment credentials do not cross the process
+boundary. Cross-process desktop discovery currently requires the operator's
+normal Codex home; that prevents complete filesystem/config isolation. The
+read-only sandbox, network-off turn, empty MCP config, strict project-path
+validation, and prompt boundary are the compensating controls.
 
-The feed URL must be HTTPS and cannot contain credentials, a query, or a
-fragment. The watcher starts Codex with an explicit environment allowlist, so
-Google configuration and unrelated service credentials do not cross into the
-child process.
+## Delivery and crash model
 
-Tasks run with:
+`transcribed_at` is assigned before transaction commit, so a cursor that only
+moves forward can skip a slow transaction that commits after a newer row. Each
+poll starts ten minutes behind the durable high-water cursor and deduplicates by
+watch-generated UUID. Pagination walks the complete overlap window. An old
+pending retry fetches its transcript by UUID, so transcript text does not need
+to be retained locally.
 
-- working directory `/home/user`;
-- approval policy `never`;
-- read-only sandbox; and
-- network access disabled for the turn.
+State is atomically replaced with mode `0600`. The task boundary is recorded in
+this order:
 
-The watcher persists only its metadata ledger (`state.json`), poll health,
-service PIDs and logs. It does not create per-task JSONL or final-message files.
+1. persist `threadRequestStartedAt`;
+2. send `thread/start`;
+3. persist the returned `threadId`;
+4. persist `turnRequestStartedAt`;
+5. send `turn/start`; and
+6. persist the returned `turnId` and mark the memo submitted.
 
-## Remote install
+A crash before step 1 is safe to retry. A durable thread ID before step 4 is
+safe to resume without creating another visible task. A missing thread response
+after step 1, or a missing turn response after step 4, is uncertain and is
+never retried automatically. The status output tells an operator to inspect
+Codex first.
 
-Copy this directory to a retained `~/wristmemo-watcher` directory on
-the specific workstation, then:
+Retryable pre-boundary failures use exponential backoff and become terminal
+after five attempts. A terminal memo remains in the attention list but never
+blocks later memos.
+
+The watcher owns one long-lived app-server child. It completes submission when
+`turn/start` returns `inProgress`; it does not wait for `turn/completed` and
+does not kill a realistic task on a turn timeout. Polling and later task
+creation continue while earlier read-only turns run.
+
+## Experimental desktop-discovery compatibility
+
+The documented [App Server](https://learn.chatgpt.com/docs/app-server) protocol
+supports `initialize`, `thread/list`, `thread/start`, `thread/resume`, and
+`turn/start`. The [remote connections](https://learn.chatgpt.com/docs/remote-connections)
+guide documents the desktop app starting its own remote app-server over SSH; it
+does not document discovery of threads made by an independent process. That
+last step remains a manually verified compatibility dependency.
+
+Runtime config must set
+`WRISTMEMO_WATCHER_DESKTOP_DISCOVERY_CODEX_VERSION` to the exact Codex version
+for which discovery was manually tested. Startup initializes app-server,
+matches its returned user agent to that pinned version, and exercises
+`thread/list`. A version mismatch or protocol failure makes compatibility and
+overall status unhealthy and prevents submission until re-verified. This check
+proves protocol/storage compatibility; the version pin records the separate
+manual desktop-visibility proof.
+
+## Image and retained runtime contract
+
+Immutable image-owned files:
+
+```text
+/opt/wristmemo-watcher/<version>/
+/opt/wristmemo-watcher/current -> <version>
+/usr/local/bin/wristmemo-watcher-service
+/etc/workstation-startup.d/245-wristmemo-watcher.sh
+```
+
+Retained user-owned files:
+
+```text
+~/.config/wristmemo-watcher/watcher.env   mode 0600; URLs, audience, project path, version pin
+~/.local/state/wristmemo-watcher/         mode 0700; ledger, lock, PIDs, private log
+```
+
+No secret, identity token, user project path, transcript, or mutable state is
+baked into the image. The watcher gets a short-lived audience-bound ID token
+from the attached workstation service account for every feed request; no key is
+downloaded.
+
+This repository does not own the `frank-ai-workstation` image. It owns the
+versioned source payload, artifact builder with a SHA-256 receipt, installer, and
+startup contract under `src/watcher`.
+The external image definition that must consume it is:
+
+```text
+frank-vm-sandbox/container-images/demo-workstation-image/profiles/frank/
+```
+
+That repository's Frank-only profile vendors `wristmemo-watcher-1.0.0.tar.gz`
+plus its SHA-256 receipt. Its Dockerfile verifies both the receipt and pinned
+digest before extraction, runs `image/install-image-layer.sh`, and then runs
+the profile smoke test. The profile manifest and image-contract tests keep the
+immutable/runtime boundary observable.
+
+To reproduce the vendored artifact from this source, run:
 
 ```bash
-cd ~/wristmemo-watcher
-cp watcher.env.example watcher.env
-# Set the real Cloud Run URL and OAuth server client ID in watcher.env.
-chmod 600 watcher.env
-source watcher.env
-./run.sh --bootstrap
-./service.sh install
+src/watcher/image/build-artifact.sh /tmp/wristmemo-watcher-artifacts
 ```
 
-Bootstrap is intentional: enabling the integration must not replay historical
-memos. `service.sh install` creates the user-owned startup item
-`~/.workstation/startup.d/120-wristmemo-watcher.sh` used by the workstation's
-retained-home startup dispatcher. It also starts a supervisor immediately. The
-supervisor restarts the watcher after a crash; the startup dispatcher restarts
-the supervisor after a workstation restart. No root service is installed.
+Building, publishing, pinning, or rolling out the external image remains a
+separate approved release operation.
 
-The workstation remains an interactive environment: when it is stopped, memo
-metadata waits safely in Cloud SQL. Availability of the workstation itself is
-owned by the existing workstation lifecycle controls, not this watcher.
+## First runtime configuration
+
+When upgrading the earlier retained-home wiring proof, first run its own
+`~/wristmemo-watcher/service.sh remove` and verify that
+`~/.workstation/startup.d/120-wristmemo-watcher.sh` is gone. The old and new
+ledgers use different roots and must never run together, or both could create a
+task for the same newly transcribed memo.
+
+After the image containing this payload is active:
+
+```bash
+mkdir -p ~/.config/wristmemo-watcher
+chmod 700 ~/.config/wristmemo-watcher
+cp /opt/wristmemo-watcher/current/watcher.env.example \
+  ~/.config/wristmemo-watcher/watcher.env
+chmod 600 ~/.config/wristmemo-watcher/watcher.env
+# Edit the private file with the real feed URL, audience, exact project folder,
+# and manually verified Codex version.
+source ~/.config/wristmemo-watcher/watcher.env
+/opt/wristmemo-watcher/current/run.sh --bootstrap
+wristmemo-watcher-service install
+```
+
+Bootstrap intentionally records existing memos as ignored. It does not replay
+history when enabling the watcher.
 
 ## Status and repair
 
 ```bash
-./service.sh status
-tail -f service/watcher.log
-source watcher.env
-./run.sh --status
-WRISTMEMO_WATCHER_RETRY_ID=<memo-id> ./run.sh --retry
+wristmemo-watcher-service status
+tail -f ~/.local/state/wristmemo-watcher/watcher.log
+source ~/.config/wristmemo-watcher/watcher.env
+/opt/wristmemo-watcher/current/run.sh --healthcheck
 ```
 
-`--status` reports counts plus metadata-only attention records. A `pending`
-record has not created a task and is safe to retry. An `interrupted` record with
-a `threadId` already has an app-visible task. An interrupted record with only a
-`threadRequestStartedAt` is uncertain because app-server may have committed the
-thread before its response was lost. `--retry` refuses both cases by default.
-It also reports the last successful feed poll and exits nonzero when that
-heartbeat is stale.
+Status reports watcher build, poll heartbeat, compatibility, counts, backlog,
+terminal failures, and uncertain records without transcript text. It exits
+nonzero when the feed heartbeat is stale or app-server compatibility is not
+healthy.
 
-`--retry`, `--once`, and `--bootstrap` take an exclusive local lock. Stop the
-service before an explicit repair that needs the lock:
+For a safe pre-boundary failure, stop the service and run one explicit retry:
 
 ```bash
-./service.sh stop
-WRISTMEMO_WATCHER_RETRY_ID=<memo-id> ./run.sh --retry
-./service.sh start
+wristmemo-watcher-service stop
+WRISTMEMO_WATCHER_RETRY_ID=<memo-uuid> \
+  /opt/wristmemo-watcher/current/run.sh --retry
+wristmemo-watcher-service start
 ```
 
-For an uncertain record, first inspect recent `/home/user` tasks in the desktop
-app. Only when no matching task exists, run the stopped service's repair once
-with both `WRISTMEMO_WATCHER_RETRY_ID=<memo-id>` and
-`WRISTMEMO_WATCHER_CONFIRM_NO_TASK=1`.
-
-To remove only the managed startup item and running supervisor while retaining
-the state and logs:
-
-```bash
-./service.sh remove
-```
+For an uncertain `thread/start`, first inspect recent tasks. Only when no task
+exists may the operator add `WRISTMEMO_WATCHER_CONFIRM_NO_TASK=1`. An uncertain
+turn on an already-created thread is never allowed to create a second task;
+continue the existing visible task instead.

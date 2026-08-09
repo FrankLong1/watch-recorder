@@ -1,6 +1,6 @@
 # Failure modes
 
-**Date:** 2026-08-06
+**Date:** 2026-08-08
 **Status:** brainstorm. Nothing here is a bug report yet — it is the catalogue
 of ways a spoken thought fails to become a row in Postgres, and what the system
 does about each one today.
@@ -210,33 +210,40 @@ retention window ends.
 
 ---
 
-## Stage 5 — transcription receipt → app-visible Codex task (wiring proof live)
+## Stage 5 — transcription receipt → app-visible Codex task
 
-The first workstation integration is live, but deliberately does not pass a
-transcript or execute work. A retained-home service polls the metadata-only
-watcher feed every 60 seconds and creates a normal remote Codex task whose fixed
-prompt is only `Reply with exactly: hello world`. Transcript-driven todos and
-execution in [2_AGENT_ARCHITECTURE.md](../architecture/2_AGENT_ARCHITECTURE.md)
-remain proposals.
+The production repository implementation passes each new non-empty transcript
+for one configured owner into one visible Codex task. Polling every 20 seconds
+is authoritative. The automatic first turn is read-only; a human continuation
+is required before any workspace edit or consequential action. Cloud Run and
+the external Frank workstation image still require an approved rollout before
+this replaces the earlier live wiring proof.
 
 | Failure | What happens today | Class |
 |---|---|---|
-| Watcher child crashes | Its user-owned supervisor restarts it after five seconds; the retained startup dispatcher restarts the supervisor after a workstation restart | 🔵 |
-| Cloud Workstation is stopped | Metadata remains in Cloud SQL and is discovered after the workstation runs again; availability is still bounded by the workstation lifecycle | 🟡 |
-| Feed fails or hangs | The request aborts after 30 seconds; durable poll health records the failure and retries with one-minute exponential backoff capped at fifteen minutes. Status becomes unhealthy after three missed poll intervals | 🔵 |
-| App-server fails before `thread/start` is sent | The memo remains `pending` in the atomic ledger and retries with the same capped exponential backoff | 🟡 |
-| Watcher stops after `thread/start` may have been sent | The record becomes `interrupted`, even without a returned thread ID. Automatic retry is refused; a human must inspect recent tasks and explicitly confirm when none exists | 🔵 |
-| Poller silently launches a headless CLI session | Prevented in the current compatibility proof: the implementation uses the documented app-server protocol, and the end-to-end check verifies the thread through the desktop app. Cross-process desktop discovery remains an experimental dependency, not a documented task-creation API | 🔵 |
-| Transcript or audio reaches the workstation | Prevented in this version: the feed returns only UUID and transcription time, and the task prompt is fixed in source | 🔵 |
-| Agent hallucinates a todo from an ambiguous memo | Not yet reachable because transcripts are not passed; remains a design risk for the proposed next stage | 🟠 |
-| **Execution agent acts on a mis-transcribed memo** | Not yet reachable. If execution is later built, the blast radius of stage 4's 🟠 class becomes "a wrong action in the world" | 🟠 |
-| No human-review boundary in a future execution path | No execution path exists today; human approval remains mandatory before one is added | 🟠 |
+| Watcher child crashes | Its supervisor restarts it after five seconds; the image-owned workstation hook starts the supervisor after recreation/restart when private runtime config exists | 🔵 |
+| Cloud Workstation is stopped | Transcripts remain in Postgres and are discovered after the workstation runs again; availability remains bounded by workstation lifecycle | 🟡 |
+| Feed fails or hangs | The request aborts after 10 seconds; durable health records a generic failure and backs off from 20 seconds to ten minutes. Status becomes stale after four missed normal polls | 🔵 |
+| A transaction commits behind the cursor | Every poll overlaps ten minutes and deduplicates by durable memo UUID; focused tests cover a delayed earlier timestamp arriving after a later row | 🟡 |
+| More rows exist than one overlap page | The watcher paginates the complete overlap instead of repeatedly reading only its first page | 🟡 |
+| Old pending memo falls outside overlap | The transcript is re-fetched by UUID through the same one-owner authorization query; it is not retained in watcher state | 🟡 |
+| One memo fails permanently before task creation | Five bounded attempts lead to terminal `failed`; the attention list stays red and later memos continue | 🔵 |
+| App-server fails before `thread/start` is sent | The memo remains retryable until the bounded terminal threshold; no task may exist yet | 🟡 |
+| Watcher stops after `thread/start` may have been sent | The record becomes `interrupted` without a returned ID. Automatic retry is refused; a human must inspect recent tasks and explicitly confirm when none exists | 🔵 |
+| Watcher stops after a thread ID but before a turn request | It resumes the known thread and sends the transcript without creating a second visible task | 🟡 |
+| Watcher stops after `turn/start` may have been sent | It never starts another task or automatically resends the turn. The human inspects/continues the existing task | 🔵 |
+| A realistic read-only turn runs longer than one poll | Submission finishes when `turn/start` is accepted; one long-lived app-server keeps the turn alive while polling continues | 🟡 |
+| Codex upgrade breaks desktop discovery | Runtime pins the manually verified Codex version. Initialize/user-agent and `thread/list` checks fail health visibly until desktop discovery is re-verified | 🔵 |
+| Another user's transcript reaches the workstation | Every watcher query includes one configured owner ID in addition to service authorization; multi-user isolation tests exercise this boundary | 🔵 |
+| Transcript appears in watcher state/logs/errors | State contains only metadata; app-server stderr is discarded; watcher errors are generic; leakage tests use sentinel transcript strings | 🔵 |
+| Audio reaches the workstation | No watcher endpoint or payload contains audio; only text crosses from Cloud Run | 🔵 |
+| Agent follows prompt-like or mis-transcribed content as an action | Transcript is labeled untrusted and the automatic turn is read-only, network-off, approval `never`, and MCP-empty. It can still produce a wrong analysis, which remains reviewable | 🟠 |
+| **Execution agent acts on a mis-transcribed memo** | No execution agent exists. A human continuation in the visible task is the approval boundary for edits or consequential actions | 🟠 |
 
-The live wiring proof stops before transcript interpretation. The compounding
-risk remains worth stating plainly for the proposed next stage: **execution
-would turn silent-wrong into silent-wrong-and-acted-upon.** Every mitigation
-for stage 4's accuracy problems gets more valuable before an execution agent
-exists.
+Transcript interpretation is now live in the repository design, but execution
+is not. The compounding risk remains worth stating plainly: **automatic
+execution would turn silent-wrong into silent-wrong-and-acted-upon.** The
+read-only first turn and human continuation boundary prevent that escalation.
 
 ---
 
@@ -269,6 +276,14 @@ because there is no corpus to re-run.
 logger added later that logs the request body, a future multipart parser that
 spools to disk, or a debug bucket created in the project — each quietly breaks
 the "audio never rests in GCP" rule with no test guarding it.
+
+**Transcript disclosure and retention.** The trusted workstation is now an
+intentional transcript recipient for one configured owner. Transcript text is
+durable in Postgres, cached in the protected phone container, transient in the
+watcher process, and retained in the visible Codex task history/provider path.
+It must not appear in watcher logs, state, service errors, image layers, or
+incident tickets. Deleting a database row alone does not delete phone or Codex
+copies; retention/deletion policy must account for each surface separately.
 
 ---
 
