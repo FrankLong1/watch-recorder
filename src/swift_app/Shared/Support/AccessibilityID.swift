@@ -20,8 +20,8 @@ enum AccessibilityID {
     /// build rather than the test.
     enum StatusText {
         static let off = "OFF"
-        static let tapToStartRecording = "Tap to start recording"
-        static let idle = "\(off)\n\(tapToStartRecording)"
+        static let tapToRecord = "Tap to record"
+        static let idle = "\(off)\n\(tapToRecord)"
         static let recording = "RECORDING"
         static let paused = "PAUSED"
         static let micOff = "MIC OFF\nALLOW IN SETTINGS"

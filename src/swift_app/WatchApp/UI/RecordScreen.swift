@@ -22,8 +22,8 @@ struct RecordScreen: View {
     // and the difference from grey is what carries the meaning, not the
     // saturation. Grey is lifted off pure black so an unlit screen and a ready
     // one are not the same thing.
-    private static let recordingColour = Color(red: 0.78, green: 0.10, blue: 0.12)
-    private static let readyColour = Color(white: 0.13)
+    private static let recordingColour = Color(red: 0.72, green: 0.06, blue: 0.11)
+    private static let readyColour = Color(white: 0.09)
     private static let completionColour = Color(red: 0.08, green: 0.48, blue: 0.22)
 
     var body: some View {
@@ -37,19 +37,44 @@ struct RecordScreen: View {
                             .font(.custom("Helvetica", size: 11, relativeTo: .caption2))
                             .opacity(0.8)
                     }
+                } else if (model.phase == .idle || model.phase == .starting),
+                          model.permission != .denied,
+                          model.notice == nil {
+                    VStack(spacing: 7) {
+                        Text(AccessibilityID.StatusText.off)
+                            .font(
+                                .custom("Helvetica", size: 33, relativeTo: .largeTitle)
+                                    .weight(.medium)
+                            )
+                            .tracking(5.8)
+                            // SwiftUI includes tracking after the last letter;
+                            // offset half of it to keep the word optically centred.
+                            .padding(.leading, 5.8)
+                            .foregroundStyle(Color(white: 0.88))
+
+                        Rectangle()
+                            .fill(Color.white.opacity(0.25))
+                            .frame(width: 96, height: 1)
+
+                        Text(AccessibilityID.StatusText.tapToRecord)
+                            .font(.custom("Helvetica", size: 9, relativeTo: .caption2))
+                            .tracking(0.8)
+                            .textCase(.uppercase)
+                            .foregroundStyle(Color(white: 0.54))
+                    }
+                } else if model.phase == .recording {
+                    Text(AccessibilityID.StatusText.recording)
+                        .font(
+                            .custom("Helvetica", size: 17, relativeTo: .headline)
+                                .weight(.medium)
+                        )
+                        .tracking(2.4)
+                        .padding(.leading, 2.4)
                 } else {
-                    if model.phase == .idle || model.phase == .starting {
-                        VStack(spacing: 4) {
-                            Text(AccessibilityID.StatusText.off)
-                                .font(.custom("Helvetica-Bold", size: 34, relativeTo: .largeTitle))
-                            Text(AccessibilityID.StatusText.tapToStartRecording)
-                                .font(.custom("Helvetica", size: 12, relativeTo: .caption))
-                                .opacity(0.8)
-                        }
-                    } else {
+                    // Pauses, permission failures, and notices stay visually
+                    // distinct from the normal two-state capture surface.
                     Text(status)
                         .font(.custom("Helvetica-Bold", size: 21, relativeTo: .title3))
-                    }
                 }
             }
             .foregroundStyle(foregroundColour)
