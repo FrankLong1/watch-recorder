@@ -1,17 +1,22 @@
 import { describe, expect, test } from "bun:test";
 import { Hono } from "hono";
-import { DatabaseUnavailableError, type MemoFeedRecord } from "./db";
+import { DatabaseUnavailableError, type MemoFeedRecord, type MemoWatcherRecord } from "./db";
 import { registerWatcherFeed } from "./watcher-feed";
 
 function testApp(
-  listTranscribedAfter: (cursor: MemoFeedRecord, limit: number) => Promise<MemoFeedRecord[]>,
-  authorization: "authorized" | "unauthorized" | "forbidden" = "authorized",
+  listWatcherMemosAfter: (
+    userId: string,
+    cursor: MemoFeedRecord,
+    limit: number,
+  ) => Promise<MemoWatcherRecord[]>,
+  authorization: { userId: string } | "unauthorized" | "forbidden" = { userId: "google:owner" },
+  getWatcherMemo: (userId: string, id: string) => Promise<MemoWatcherRecord | null> = async () => null,
 ) {
   const app = new Hono();
   const logs: Array<{ message: string; fields?: Record<string, string | number> }> = [];
   registerWatcherFeed(app, {
     authorize: async () => authorization,
-    store: { listTranscribedAfter },
+    store: { listWatcherMemosAfter, getWatcherMemo },
     log: (message, fields) => logs.push({ message, fields }),
   });
   return { app, logs };
@@ -36,12 +41,13 @@ describe("watcher feed", () => {
     })).status).toBe(403);
   });
 
-  test("returns only lossless metadata and forwards the exact cursor", async () => {
-    const calls: Array<{ cursor: MemoFeedRecord; limit: number }> = [];
-    const { app } = testApp(async (cursor, limit) => {
-      calls.push({ cursor, limit });
+  test("returns transcript-bearing rows for exactly one configured owner", async () => {
+    const calls: Array<{ userId: string; cursor: MemoFeedRecord; limit: number }> = [];
+    const { app } = testApp(async (userId, cursor, limit) => {
+      calls.push({ userId, cursor, limit });
       return [{
         id: "986bb295-f478-4428-a341-02c88b814bf0",
+        transcript: "Draft a read-only plan for the new capture status.",
         transcribedAt: "2026-08-08T15:31:50.299417Z",
       }];
     });
@@ -53,13 +59,34 @@ describe("watcher feed", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(calls).toEqual([{ cursor: { transcribedAt: after, id: afterId }, limit: 20 }]);
+    expect(calls).toEqual([{
+      userId: "google:owner",
+      cursor: { transcribedAt: after, id: afterId },
+      limit: 20,
+    }]);
     expect(await response.json()).toEqual({
       memos: [{
         id: "986bb295-f478-4428-a341-02c88b814bf0",
+        transcript: "Draft a read-only plan for the new capture status.",
         transcribedAt: "2026-08-08T15:31:50.299417Z",
       }],
     });
+  });
+
+  test("re-fetches one memo through the same owner scope", async () => {
+    const id = "986bb295-f478-4428-a341-02c88b814bf0";
+    const calls: Array<{ userId: string; id: string }> = [];
+    const { app } = testApp(async () => [], { userId: "google:owner-a" }, async (userId, requestedId) => {
+      calls.push({ userId, id: requestedId });
+      return { id, transcript: "Owner A memo", transcribedAt: "2026-08-08T15:31:50.299417Z" };
+    });
+
+    const response = await app.request(`/v1/watcher/memos/${id}`, {
+      headers: { Authorization: "Bearer watcher-service-token" },
+    });
+    expect(response.status).toBe(200);
+    expect(calls).toEqual([{ userId: "google:owner-a", id }]);
+    expect(JSON.stringify(await response.json())).not.toContain("Owner B");
   });
 
   test("rejects invalid cursors and page sizes before querying", async () => {

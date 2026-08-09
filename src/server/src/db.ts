@@ -73,13 +73,19 @@ export interface MemoRecord {
 }
 
 export interface MemoFeedRecord {
-    id: string;
-    /// Lossless UTC timestamp cursor from Postgres, including microseconds.
-    transcribedAt: string;
+  id: string;
+  /// Lossless UTC timestamp cursor from Postgres, including microseconds.
+  transcribedAt: string;
+}
+
+/// The single-owner workstation feed. Transcript text crosses this trust
+/// boundary, but audio, routes, and other users' rows never do.
+export interface MemoWatcherRecord extends MemoFeedRecord {
+  transcript: string;
 }
 
 /// A transcript the authenticated memo owner may read on their phone. This is
-/// intentionally separate from the watcher feed, which remains metadata-only.
+/// intentionally separate from the service-account-authenticated watcher feed.
 export interface MemoTranscriptRecord extends MemoFeedRecord {
   /// Unix seconds from the watch's recorded-at value, suitable for direct
   /// display on the phone without locale-sensitive server formatting.
@@ -92,7 +98,12 @@ export interface MemoStore {
   isTranscribed(id: string): Promise<boolean>;
   withMemoLock<T>(id: string, operation: () => Promise<T>): Promise<T>;
   save(memo: MemoRecord): Promise<void>;
-  listTranscribedAfter(cursor: MemoFeedRecord, limit: number): Promise<MemoFeedRecord[]>;
+  listWatcherMemosAfter(
+    userId: string,
+    cursor: MemoFeedRecord,
+    limit: number,
+  ): Promise<MemoWatcherRecord[]>;
+  getWatcherMemo(userId: string, id: string): Promise<MemoWatcherRecord | null>;
   listTranscriptsAfter(
     userId: string,
     cursor: MemoFeedRecord,
@@ -214,22 +225,47 @@ export function createMemoStore(config: DatabaseConfig): MemoStore {
       }
     },
 
-    async listTranscribedAfter(cursor, limit) {
+    async listWatcherMemosAfter(userId, cursor, limit) {
       try {
         return (await client()`
           SELECT
             id::text,
+            transcript,
             to_char(
               transcribed_at AT TIME ZONE 'UTC',
               'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
             ) AS "transcribedAt"
           FROM wristmemo.memos
-          WHERE transcript <> ''
+          WHERE user_id = ${userId}
+            AND transcript <> ''
             AND transcribed_at IS NOT NULL
             AND (transcribed_at, id) > (${cursor.transcribedAt}::timestamptz, ${cursor.id}::uuid)
           ORDER BY transcribed_at ASC, id ASC
           LIMIT ${limit}
-        `) as MemoFeedRecord[];
+        `) as MemoWatcherRecord[];
+      } catch (error) {
+        wrap(error);
+      }
+    },
+
+    async getWatcherMemo(userId, id) {
+      try {
+        const rows = (await client()`
+          SELECT
+            id::text,
+            transcript,
+            to_char(
+              transcribed_at AT TIME ZONE 'UTC',
+              'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
+            ) AS "transcribedAt"
+          FROM wristmemo.memos
+          WHERE user_id = ${userId}
+            AND id = ${id}::uuid
+            AND transcript <> ''
+            AND transcribed_at IS NOT NULL
+          LIMIT 1
+        `) as MemoWatcherRecord[];
+        return rows[0] ?? null;
       } catch (error) {
         wrap(error);
       }

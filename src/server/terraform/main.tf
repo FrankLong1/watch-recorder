@@ -273,6 +273,10 @@ resource "google_cloud_run_v2_service" "ingest" {
         value = join(",", local.watcher_service_accounts)
       }
       env {
+        name  = "GOOGLE_WATCHER_OWNER_SUBJECT"
+        value = var.google_watcher_owner_subject
+      }
+      env {
         name = "OPENAI_API_KEY"
         value_source {
           secret_key_ref {
@@ -292,6 +296,10 @@ resource "google_cloud_run_v2_service" "ingest" {
     precondition {
       condition     = length(local.watcher_service_accounts) > 0
       error_message = "At least one Google watcher service account must be configured."
+    }
+    precondition {
+      condition     = contains(var.google_allowed_user_subjects, var.google_watcher_owner_subject)
+      error_message = "google_watcher_owner_subject must also be in google_allowed_user_subjects."
     }
   }
 

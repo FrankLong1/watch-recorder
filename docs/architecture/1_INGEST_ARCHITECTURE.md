@@ -109,8 +109,12 @@ sent back to the wrist.
 This gives the user an iPhone review and search surface, including an explicit
 “transcribing” state while a memo is still in flight. It also makes a bad
 transcription inspectable while the temporary local source audio is available.
-The workstation watcher remains a different trust boundary and still receives
-only UUID plus transcription timestamp.
+The workstation watcher is a separate trusted transcript-disclosure boundary.
+Its attached service-account identity may read UUID, transcription timestamp,
+and transcript text for exactly one configured Google owner subject. It never
+receives audio, routes, or another user's rows. Transcript text is transient in
+the watcher process and retained in the resulting visible Codex task history;
+see [2_AGENT_ARCHITECTURE.md](2_AGENT_ARCHITECTURE.md).
 
 ```mermaid
 stateDiagram-v2
