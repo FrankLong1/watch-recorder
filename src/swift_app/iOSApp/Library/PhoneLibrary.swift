@@ -87,7 +87,6 @@ final class PhoneLibrary: NSObject {
     private(set) var items: [Item] = []
     private(set) var transcripts: [Transcript] = []
     private(set) var playingID: UUID?
-    private(set) var isSynchronizingTranscripts = false
     /// Google Sign-In is the single setup gate for transcript delivery. Once a
     /// stable Google account is restored, every safely committed memo advances
     /// automatically; capture itself never waits for this value.
@@ -405,10 +404,6 @@ final class PhoneLibrary: NSObject {
         }
         transcripts = byID.values.sorted { $0.recordedAt > $1.recordedAt }
         persistTranscriptCache()
-    }
-
-    func setTranscriptSyncing(_ value: Bool) {
-        isSynchronizingTranscripts = value
     }
 
     private func advanceTranscriptCursor(with transcript: Transcript) {

@@ -365,11 +365,9 @@ final class TranscriptHistoryClient {
               let configuration = IngestConfiguration.current
         else { return }
 
-        library.setTranscriptSyncing(true)
         syncTask = Task { [weak self, weak library, weak authentication] in
             defer {
                 self?.syncTask = nil
-                library?.setTranscriptSyncing(false)
             }
             guard let self, let library, let authentication else { return }
             do {
