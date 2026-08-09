@@ -121,6 +121,12 @@ On relaunch, `recoverBackgroundTasks()` reconciles anything persisted as
 ones with no task left to finish them. Re-sending is free — the server is
 idempotent on the memo's UUID.
 
+The phone gives that background session one upload lane. Even when a restored
+phone holds a large backlog, it starts only the next pending memo and
+waits for that task's terminal callback before advancing. This matches normal
+watch capture volume, avoids exhausting the shared database, and prevents a
+retry scan from overlapping a transcription that is still in flight.
+
 ---
 
 ## Where a memo can get stuck
@@ -131,15 +137,12 @@ flowchart TD
     S1 -->|"no"| K1["🔴 waits on the wrist<br/>indefinitely"]
     S1 -->|"yes"| S2{"Google session<br/>available?"}
     S2 -->|"no"| K2["🟠 stays pending<br/>Sign in shown on phone"]
-    S2 -->|"yes"| S2A{"audio upload<br/>approved for account?"}
-    S2A -->|"no"| K2A["🟠 stays pending<br/>counted approval shown"]
-    S2A -->|"yes"| S3{"upload result"}
+    S2 -->|"yes"| S3{"upload result"}
     S3 -->|"permanent 4xx"| K3["🟠 failed, never retried"]
     S3 -->|"204"| OK["🟢 row in Postgres"]
 
     style K1 fill:#8b1a1a,stroke:#5a0f0f,color:#fff
     style K2 fill:#8b1a1a,stroke:#5a0f0f,color:#fff
-    style K2A fill:#7f6a1a,stroke:#4a3d0d,color:#fff
     style K3 fill:#7f6a1a,stroke:#4a3d0d,color:#fff
     style OK fill:#1a7f37,stroke:#0d4a20,color:#fff
 ```
@@ -148,10 +151,9 @@ flowchart TD
 refuses to delete, so a stuck memo keeps its audio for as long as it is stuck.
 Delivery failures are visible in the phone library without putting any choice
 on the watch capture path. If the Google session is absent or expired, audio
-stays pending and the phone offers Sign in with Google. Sign-in unlocks identity
-and transcript history only. The phone then shows the exact pending count and
-requires explicit approval before it schedules the backlog; that approval is
-persisted for the exact immutable Google account, and sign-out revokes it.
+stays pending and the phone offers Sign in with Google. Sign-in verifies the
+account, unlocks transcript history, and automatically starts the oldest pending
+recording. Sign-out cancels current work back to the durable queue.
 
 ---
 
@@ -182,8 +184,7 @@ an upload that *survives the app being suspended* can only be shown on hardware.
 
 1. **Run it on hardware.** Put the endpoint plus iOS/server OAuth client IDs in
    ignored `Config/Signing.local.xcconfig`, install the signed app, complete
-   Sign in with Google, and explicitly enable transcription. Then record a memo
-   on the watch and confirm the row.
+   Sign in with Google, then record a memo on the watch and confirm the row.
    This is the only remaining untested thing: leg ① from real hardware, and the
    background session doing what the simulator cannot.
 

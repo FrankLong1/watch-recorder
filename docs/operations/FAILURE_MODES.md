@@ -114,7 +114,7 @@ still leaves a decodable file
 | Wrist drops, app backgrounds | `WKBackgroundModes: audio` keeps it running under tighter CPU limits; watchOS may still suspend | 🟠 |
 | Disk fills mid-recording | `audioRecorderEncodeErrorDidOccur` → `onUnexpectedStop`; partial capture is finalized | 🔵 |
 | AAC compression fails at save | Raw `.caf` is kept instead — "a large memo beats a lost one" ([`finalize`](../../src/swift_app/WatchApp/Storage/MemoStore.swift)). The phone atomically normalises it to M4A before ingest; if that fails, the CAF remains locally pending rather than being mislabelled | 🟡 |
-| Recording < 0.3 s | Discarded as a stray press | 🟡 |
+| Header-only pre-arm file | Discarded: it has no recorded samples. Any file containing audio, however short, is retained. | 🟡 |
 | User forgets to stop; memo runs for hours | AAC 32 kbit/s ≈ 240 KB/min → the 25 MB server cap is ~104 min. A raw CAF fallback is normalised on the phone before it is eligible for upload, so it cannot reach the server under a false type | 🟡 |
 | Watch reboots mid-recording | Orphan recovery, as above | 🟡 |
 | Microphone occluded (sleeve, rain, Ultra's siren port wet) | Silent or garbled audio. Nothing checks the level before committing | 🟠 |
@@ -159,9 +159,10 @@ retention clock never starts.
 |---|---|---|
 | No network at all | Background session `waitsForConnectivity`; the OS resumes it later | 🟡 |
 | **Captive portal** (hotel, airport, café WiFi) | A portal's `200` is not WristMemo's exact `204 No Content` receipt. The phone leaves the memo pending and retries | 🟡 |
-| User has not completed Google Sign-In | Audio stays `pending`; the phone library offers Google Sign-In for identity and transcript access without uploading audio | 🟡 |
-| User signed in but has not approved audio upload | Audio stays `pending`; the phone shows the exact held count and requires a separate confirmation bound to that immutable Google account | 🔵 |
-| User signs out or changes Google account | The account-bound upload authorization is revoked, active tasks cancel back to `pending`, and the backlog requires a fresh counted approval | 🔵 |
+| User has not completed Google Sign-In | Audio stays `pending`; the phone library offers the one setup action that enables authenticated automatic transcription and transcript history | 🟡 |
+| User signs out or changes Google account | Active tasks cancel back to `pending`; a restored Google session resumes the durable queue automatically | 🔵 |
+| Large backlog starts together | The phone's background session owns one upload lane and advances only after the active task completes; the remaining audio stays durably `pending` | 🔵 |
+| An older build persisted backlog rate limits as terminal failures | A one-shot signed-in migration returns those legacy `failed` sidecars to the serial queue. New `408`, `425`, and `429` responses remain `pending` with backoff | 🔵 |
 | Device rebooted, not yet unlocked | Google session restoration may wait until protected credential storage is available; audio remains pending and is reconciled on the next activation | 🟡 |
 | Google ID token expires or is rejected | `401` returns the memo to `pending`; the next attempt silently refreshes the Google session. If restoration needs interaction, the phone shows signed out | 🟡 |
 | Wrong Google account | Exact verified `sub` allowlist returns `403` → terminal `failed`; changing to the allowed account makes manual retry safe | 🔴 |
@@ -169,6 +170,8 @@ retention clock never starts.
 | Low Data Mode / cellular disabled for the app | Deferred until WiFi | 🟡 |
 | Cloud Run scaled to zero | Cold start ~1 s, absorbed by the retry policy | 🟡 |
 | Server 5xx | `pending` + backoff 30 s → 30 min | 🟡 |
+| Server rate-limits with `429` | `pending` + backoff 30 s → 30 min; it is never treated as malformed audio | 🟡 |
+| Shared Cloud SQL connection slots exhausted | The phone receives `503` and preserves the memo for retry. Normal phone delivery is serial; Cloud Run is capped at one instance with a two-connection process pool, keeping the shared database within its usable slot budget. | 🟡 |
 | Retry backoff never fires | The retry `Task` dies with the process. Recovery depends on `didBecomeActive` or a WatchConnectivity relaunch; the phone library now exposes the pending/failed memo, but cannot repair it while never opened | 🔴 |
 | Endpoint URL changed (new Cloud Run revision, new domain) | DNS/TLS failure → infinite retry against a dead host | 🔴 |
 | A live Google ID token is stolen | It is audience-bound, subject-bound, and short-lived, but replay remains possible until expiry; OAuth App Check/App Attest reduces issuance from modified clients | 💸 |
@@ -192,6 +195,7 @@ ordinary retry policy gets another chance after the user completes the portal.
 | Two overlapping requests for one memo | Advisory lock → `503` + `Retry-After: 30` | 🟡 |
 | Neighbouring service saturates the shared `db-f1-micro` | `503`s, and WristMemo can degrade the neighbour in the other direction | 🟠 |
 | Transcript is silence | Whisper-family models hallucinate on silence ("Thank you for watching"). A confident, wrong row is stored | 🟠 |
+| Transcription returns zero words | Stored as a durable no-content outcome so retries cannot rebill it, but excluded from the phone library and watcher feed | 🔵 |
 | Proper nouns, tickers, accents mis-heard | The exact words this app exists to capture. Stored as fact | 🟠 |
 | Routing prefix mis-transcribed | `parseRoute` finds nothing → the memo files under no route and never reaches the right agent | 🟠 |
 | Request exceeds Cloud Run's timeout | Transcription is capped at 4 min; a long memo can outlive the platform timeout, producing a `502`-shaped stall | 🟡 |

@@ -16,6 +16,7 @@ MIGRATIONS=(
   "0003_watcher_operator_role.sql"
   "0004_retire_watcher_database_access.sql"
   "0005_transcript_history_index.sql"
+  "0006_filter_empty_transcripts.sql"
 )
 
 psql_db() {

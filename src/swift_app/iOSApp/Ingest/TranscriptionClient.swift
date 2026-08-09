@@ -20,6 +20,7 @@ final class TranscriptionClient: NSObject {
     private weak var authentication: GoogleAuthentication?
     private var authorizationTask: Task<Void, Never>?
     private var retryTask: Task<Void, Never>?
+    private var taskInspectionInProgress = false
     private var retryDelay: TimeInterval = 30
     private var didActivate = false
     private var backgroundEventsFinished: (() -> Void)?
@@ -108,47 +109,84 @@ final class TranscriptionClient: NSObject {
         }
     }
 
-    /// Re-queues anything that never landed. Safe to call repeatedly: the server
-    /// keys on the memo's id, so a memo that already arrived is answered without
-    /// being transcribed again.
+    /// Advances the durable queue by at most one memo. The background session
+    /// is the source of truth for work already in flight, including work owned
+    /// by a previous process after iOS relaunches the app.
     func uploadPending() {
-        guard authorizationTask == nil,
-              let library,
-              let authentication,
-              library.uploadsAreAuthorized,
-              authentication.isSignedIn,
-              let configuration = IngestConfiguration.current
-        else { return }
-        let pending = library.items.filter { $0.uploadState == .pending }
-        guard !pending.isEmpty else { return }
-
-        authorizationTask = Task { [weak self] in
-            defer { self?.authorizationTask = nil }
-            do {
-                let idToken = try await authentication.idToken()
-                for item in pending where library.items.contains(where: { $0.id == item.id && $0.uploadState == .pending }) {
-                    guard !Task.isCancelled, library.uploadsAreAuthorized else { return }
-                    self?.upload(item, baseURL: configuration.baseURL, idToken: idToken)
-                }
-            } catch {
-                self?.log.info("Google authorization unavailable; memos remain pending")
-                self?.scheduleRetry()
-            }
-        }
+        inspectBackgroundTasks(recoverMissingUploads: false)
     }
 
     /// Background URLSession tasks survive a process launch. Keep the ones the
     /// system still owns, and requeue only persisted uploads that have no task
     /// left to finish them.
     private func recoverBackgroundTasks() {
+        inspectBackgroundTasks(recoverMissingUploads: true)
+    }
+
+    private func inspectBackgroundTasks(recoverMissingUploads: Bool) {
+        guard !taskInspectionInProgress, authorizationTask == nil else { return }
+        taskInspectionInProgress = true
+
         session.getAllTasks { [weak self] tasks in
             let activeIDs = Set(tasks.compactMap(Self.memoID(for:)))
             Task { @MainActor [weak self] in
-                guard let self, let library = self.library else { return }
-                for item in library.items where item.uploadState == .uploading && !activeIDs.contains(item.id) {
-                    library.setUploadState(.pending, for: item.id)
+                guard let self else { return }
+                defer { self.taskInspectionInProgress = false }
+                guard let library = self.library else { return }
+
+                if recoverMissingUploads {
+                    for item in library.items where item.uploadState == .uploading && !activeIDs.contains(item.id) {
+                        library.setUploadState(.pending, for: item.id)
+                    }
                 }
-                self.uploadPending()
+
+                let pendingIDs = library.items
+                    .filter { $0.uploadState == .pending }
+                    // Drain oldest-first so a steady stream of fresh captures
+                    // cannot starve a restored backlog indefinitely.
+                    .sorted { $0.recordedAt < $1.recordedAt }
+                    .map(\.id)
+                guard let nextID = UploadQueuePolicy.nextPendingID(
+                    pendingIDs: pendingIDs,
+                    activeTaskCount: tasks.count
+                ),
+                      let item = library.items.first(where: { $0.id == nextID }),
+                      let authentication = self.authentication,
+                      library.uploadsAreAuthorized,
+                      authentication.isSignedIn,
+                      let configuration = IngestConfiguration.current
+                else { return }
+
+                self.authorizeAndUpload(
+                    item,
+                    library: library,
+                    authentication: authentication,
+                    configuration: configuration
+                )
+            }
+        }
+    }
+
+    private func authorizeAndUpload(
+        _ item: PhoneLibrary.Item,
+        library: PhoneLibrary,
+        authentication: GoogleAuthentication,
+        configuration: IngestConfiguration.Configuration
+    ) {
+        authorizationTask = Task { [weak self] in
+            defer { self?.authorizationTask = nil }
+            do {
+                let idToken = try await authentication.idToken()
+                guard !Task.isCancelled,
+                      library.uploadsAreAuthorized,
+                      library.items.contains(where: {
+                          $0.id == item.id && $0.uploadState == .pending
+                      })
+                else { return }
+                self?.upload(item, baseURL: configuration.baseURL, idToken: idToken)
+            } catch {
+                self?.log.info("Google authorization unavailable; memos remain pending")
+                self?.scheduleRetry()
             }
         }
     }
@@ -224,6 +262,7 @@ final class TranscriptionClient: NSObject {
             // This memo has a day left, but an upload finishing may be the only
             // thing that wakes the app all day, so sweep the older ones now.
             library.purgeUploaded()
+            uploadPending()
             return
         }
 
@@ -241,11 +280,18 @@ final class TranscriptionClient: NSObject {
             library.setUploadState(.pending, for: id)
             log.info("Google authorization expired; will refresh and retry")
             scheduleRetry()
+        case .some(let code) where UploadQueuePolicy.isTransientClientStatus(code):
+            // 408/425/429 describe timing or capacity, not bad audio. Keeping
+            // them retryable is especially important when restoring a backlog.
+            library.setUploadState(.pending, for: id)
+            log.info("Upload deferred with \(code, privacy: .public); will retry")
+            scheduleRetry()
         case .some(let code) where (400..<500).contains(code):
             // The request itself is wrong — a bad token, an oversized memo, a
             // malformed header. Retrying sends exactly the same bytes.
             library.setUploadState(.failed, for: id)
             log.error("Upload rejected with \(code, privacy: .public); not retrying")
+            uploadPending()
         case .some(let code):
             library.setUploadState(.pending, for: id)
             log.error("Upload got \(code, privacy: .public); will retry")

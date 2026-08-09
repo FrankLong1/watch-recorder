@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The entire app.
 ///
-/// One control, the size of the screen. Grey READY is the only in-app start
+/// One control, the size of the screen. Grey OFF is the only in-app start
 /// surface; red RECORDING turns that same large target into a deterministic
 /// stop. Double Tap is enabled only while it stops. No timer, no meter, no
 /// cancel, no list, no settings, no navigation: everything a memo needs after
@@ -32,14 +32,24 @@ struct RecordScreen: View {
                 if let receipt = model.completionReceipt {
                     VStack(spacing: 5) {
                         Text(receipt.title)
-                            .font(.system(size: 19, weight: .black, design: .rounded))
+                            .font(.custom("Helvetica-Bold", size: 19, relativeTo: .headline))
                         Text(receipt.detail)
-                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                            .font(.custom("Helvetica", size: 11, relativeTo: .caption2))
                             .opacity(0.8)
                     }
                 } else {
+                    if model.phase == .idle || model.phase == .starting {
+                        VStack(spacing: 4) {
+                            Text(AccessibilityID.StatusText.off)
+                                .font(.custom("Helvetica-Bold", size: 34, relativeTo: .largeTitle))
+                            Text(AccessibilityID.StatusText.tapToStartRecording)
+                                .font(.custom("Helvetica", size: 12, relativeTo: .caption))
+                                .opacity(0.8)
+                        }
+                    } else {
                     Text(status)
-                        .font(.system(size: 21, weight: .bold, design: .rounded))
+                        .font(.custom("Helvetica-Bold", size: 21, relativeTo: .title3))
+                    }
                 }
             }
             .foregroundStyle(foregroundColour)
@@ -53,7 +63,7 @@ struct RecordScreen: View {
         .ignoresSafeArea()
         .animation(.easeOut(duration: 0.12), value: model.isRecording)
         .animation(.easeOut(duration: 0.12), value: model.completionReceipt)
-        // Double Tap is a stop-only gesture. Disabling it while READY prevents
+        // Double Tap is a stop-only gesture. Disabling it while OFF prevents
         // an incidental hand gesture from becoming a second start route.
         .handGestureShortcut(.primaryAction, isEnabled: model.canStopRecording)
         .accessibilityIdentifier(AccessibilityID.recordButton)
@@ -71,10 +81,10 @@ struct RecordScreen: View {
         return switch model.phase {
         case .recording: AccessibilityID.StatusText.recording
         // Paused is the interruption case — a call took the microphone. It is
-        // not red, because nothing is being written, and saying READY would
+        // not red, because nothing is being written, and saying OFF would
         // invite a tap that starts a second memo on top of a live one.
         case .paused: AccessibilityID.StatusText.paused
-        case .idle, .starting: AccessibilityID.StatusText.ready
+        case .idle, .starting: AccessibilityID.StatusText.idle
         }
     }
 

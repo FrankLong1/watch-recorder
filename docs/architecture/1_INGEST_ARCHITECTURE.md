@@ -96,11 +96,10 @@ flowchart LR
 
 The phone still uploads a file and receives only the exact `204` receipt that
 drives retry. It never receives transcript content on the audio upload path.
-Google Sign-In is deliberately read-only at first: authenticating never implies
-permission to send the existing audio backlog. The phone shows the exact pending
-recording count and requires a second confirmation before it persists upload
-permission for that immutable Google account. Signing out revokes that
-permission and cancels active uploads back to `pending`.
+Google Sign-In is the single setup action: once a stable account is restored,
+the phone automatically advances every safely committed recording through the
+serial background upload queue. Signing out cancels active uploads back to
+`pending`; signing in again resumes them.
 
 After sign-in, the companion can make a separate, authenticated, text-only
 cursor request for the owner's transcript history and stores that cache in its
@@ -116,8 +115,7 @@ only UUID plus transcription timestamp.
 ```mermaid
 stateDiagram-v2
     [*] --> pending: arrives from watch
-    pending --> pending: signed in, upload not approved
-    pending --> uploading: approved account + network available
+    pending --> uploading: signed-in account + network available
     uploading --> uploaded: 204
     uploading --> pending: 401 refresh / timeout / 5xx / offline
     uploading --> failed: 403, 413, permanent 4xx
@@ -157,9 +155,9 @@ Cloud Run is reachable at the platform layer because the phone's ID token is
 for WristMemo's OAuth server client, not Cloud Run IAM's service URL. The
 application verifies Google's signature, issuer, exact audience, expiry and the
 user's immutable `sub` before it reads the audio stream. Initial sign-in is
-interactive but does not upload audio. A separate, counted confirmation binds
-automatic uploads to that exact `sub`; later background uploads silently refresh
-the Google session while that authorization remains in force.
+interactive and is the only authorization surface; later background uploads
+silently refresh that same Google session. No reusable ingest token is stored
+on either Apple device.
 
 The iOS OAuth client is protected with Google OAuth App Check backed by Apple
 App Attest. That protects the sign-in/token issuance path from modified clients;

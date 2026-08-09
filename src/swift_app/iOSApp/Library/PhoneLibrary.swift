@@ -88,18 +88,26 @@ final class PhoneLibrary: NSObject {
     private(set) var transcripts: [Transcript] = []
     private(set) var playingID: UUID?
     private(set) var isSynchronizingTranscripts = false
-    /// True only after the currently signed-in Google account has separately
-    /// received explicit permission to upload audio. Sign-in alone is read-only.
+    /// Google Sign-In is the single setup gate for transcript delivery. Once a
+    /// stable Google account is restored, every safely committed memo advances
+    /// automatically; capture itself never waits for this value.
     private(set) var uploadsAreAuthorized = false
 
     private let log = SharedConfig.logger("PhoneLibrary")
     private var player: AVAudioPlayer?
     private let ingest = TranscriptionClient()
     private let transcriptHistory = TranscriptHistoryClient()
-    private let uploadConsent = AudioUploadConsent()
     private weak var authentication: GoogleAuthentication?
     private var didStart = false
     private var transcriptCursor = TranscriptCursor.beginning
+
+    /// Build 5 could release an entire restored backlog concurrently. Cloud
+    /// Run's 429 responses were incorrectly persisted as terminal failures,
+    /// so build 8 performs one durable migration back into the now-serial
+    /// queue. This is deliberately one-shot: a genuinely malformed memo that
+    /// later receives a terminal 4xx must stay visible as failed.
+    private static let legacyFailedUploadRecoveryKey =
+        "WristMemo.requeuedLegacyFailedUploads.v1"
 
     private nonisolated static let importLog = SharedConfig.logger("PhoneImport")
 
@@ -131,6 +139,7 @@ final class PhoneLibrary: NSObject {
         self.authentication = authentication
         refreshUploadAuthorization()
         reload()
+        recoverLegacyFailedUploadsIfNeeded()
         loadTranscriptCache()
         recoverLegacyRawMemos()
         // Every launch is a chance to sweep, which matters because the app can
@@ -157,36 +166,22 @@ final class PhoneLibrary: NSObject {
 
     func authenticationDidChange() {
         refreshUploadAuthorization()
+        recoverLegacyFailedUploadsIfNeeded()
         ingest.authenticationDidChange()
         transcriptHistory.authenticationDidChange()
     }
 
-    /// Called only from the phone's counted confirmation dialog. The durable
-    /// decision is tied to Google's immutable account ID, so signing into a
-    /// different account can never release this backlog silently.
-    func authorizeUploadsForCurrentAccount() {
-        guard uploadConsent.grant(accountID: authentication?.accountIdentifier) else {
-            log.error("Refusing upload authorization without a stable Google account")
-            return
-        }
-        authenticationDidChange()
-    }
-
-    /// Signing out removes upload permission as well as the Google session.
-    /// Existing background tasks are cancelled back to `pending`; audio stays
-    /// on the phone and can be approved again later.
-    func revokeUploadAuthorization() {
-        uploadConsent.revoke()
+    /// Sign-out is the one explicit off switch. Existing background tasks are
+    /// cancelled back to `pending`; audio stays on the phone and resumes only
+    /// after a Google account is authenticated again.
+    func prepareForSignOut() {
         uploadsAreAuthorized = false
         ingest.cancelActiveUploads()
     }
 
-    var pendingUploadCount: Int {
-        items.count { $0.uploadState == .pending }
-    }
-
     private func refreshUploadAuthorization() {
-        uploadsAreAuthorized = uploadConsent.allows(
+        uploadsAreAuthorized = UploadQueuePolicy.isAuthorizedByGoogleSignIn(
+            isSignedIn: authentication?.isSignedIn == true,
             accountID: authentication?.accountIdentifier
         )
     }
@@ -284,6 +279,27 @@ final class PhoneLibrary: NSObject {
     private func recoverLegacyRawMemos() {
         for item in items where !item.isReadyForIngest && item.uploadState == .uploaded {
             setUploadState(.pending, for: item.id)
+        }
+    }
+
+    /// Repairs the one known bad state written by the pre-serial uploader.
+    /// The marker is committed only after every sidecar has been rewritten, so
+    /// a process death midway through the migration cannot strand the rest.
+    private func recoverLegacyFailedUploadsIfNeeded() {
+        guard uploadsAreAuthorized,
+              !UserDefaults.standard.bool(forKey: Self.legacyFailedUploadRecoveryKey)
+        else { return }
+
+        let failedIDs = items
+            .filter { $0.uploadState == .failed }
+            .map(\.id)
+        for id in failedIDs {
+            setUploadState(.pending, for: id)
+        }
+        UserDefaults.standard.set(true, forKey: Self.legacyFailedUploadRecoveryKey)
+
+        if !failedIDs.isEmpty {
+            log.notice("Recovered \(failedIDs.count) legacy failed upload(s) into the serial queue")
         }
     }
 

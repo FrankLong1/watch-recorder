@@ -15,7 +15,7 @@ import {
   isAllowedUser,
 } from "./google-identity";
 import { parseRoute } from "./routing";
-import { transcribe, TranscriptionError, transcriptionFailureStatus } from "./transcribe";
+import { hasTranscriptWords, transcribe, TranscriptionError, transcriptionFailureStatus } from "./transcribe";
 import { registerTranscriptFeed } from "./transcript-feed";
 import { isSupportedMemoUpload } from "./upload-format";
 import { registerWatcherFeed } from "./watcher-feed";
@@ -131,24 +131,28 @@ app.post("/v1/memos/:id", async (c) => {
         signal: AbortSignal.timeout(4 * 60 * 1000),
       });
 
-      const { route, body } = parseRoute(result.text);
+      // A blank response is a completed no-content outcome, not a memo for the
+      // phone library or watcher. Store the empty marker durably so a lost 204
+      // cannot cause a retry to bill the same accidental recording again.
+      const transcript = hasTranscriptWords(result.text) ? result.text : "";
+      const { route, body } = parseRoute(transcript);
 
       await store.save({
         id,
         userId: databaseUserId(principal),
         recordedAt: new Date(recordedAtSeconds * 1000),
         durationSeconds,
-        transcript: result.text,
+        transcript,
         body,
         route,
         model: result.model,
       });
 
-      log("transcribed", {
+      log(transcript.length === 0 ? "empty transcription filtered" : "transcribed", {
         id,
         durationSeconds: Math.round(durationSeconds),
         bytes: declaredLength,
-        characters: result.text.length,
+        characters: transcript.length,
         route: route ?? "none",
       });
       return c.body(null, 204);

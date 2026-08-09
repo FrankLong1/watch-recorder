@@ -45,6 +45,7 @@ cat >/dev/null || true
     expect(calls).not.toContain("-f ".concat(join(serverRoot, "migrations/0003_watcher_operator_role.sql")));
     expect(calls).toContain("-f ".concat(join(serverRoot, "migrations/0004_retire_watcher_database_access.sql")));
     expect(calls).toContain("-f ".concat(join(serverRoot, "migrations/0005_transcript_history_index.sql")));
+    expect(calls).toContain("-f ".concat(join(serverRoot, "migrations/0006_filter_empty_transcripts.sql")));
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

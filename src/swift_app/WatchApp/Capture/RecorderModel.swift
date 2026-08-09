@@ -77,7 +77,7 @@ final class RecorderModel {
     }
     private(set) var permission: MicPermission = .undetermined
 
-    /// A word shown in place of READY, then cleared on its own.
+    /// A word shown in place of OFF, then cleared on its own.
     ///
     /// Deliberately not a phase. Everything that can go wrong here goes wrong
     /// *after* the recording ended — compression, mostly — by which point the
@@ -146,9 +146,9 @@ final class RecorderModel {
 
     /// Long enough to read a single word on a wrist that has just come up.
     private static let noticeDuration: Duration = .seconds(3)
-    /// A confirmation should feel immediate but never make the next capture
-    /// wait. A tap or Action-button press clears it sooner.
-    private static let completionReceiptDuration: Duration = .milliseconds(1_250)
+    /// Give the finished-capture message enough time to register, without ever
+    /// making the next capture wait. A tap or Action-button press clears it sooner.
+    private static let completionReceiptDuration: Duration = .milliseconds(2_500)
     /// A brief grace period makes lowering the wrist a deliberate stop without
     /// ending a memo when the user merely glances away.
     private static let wristDownStopDelay: Duration = .seconds(8)
@@ -286,7 +286,7 @@ final class RecorderModel {
 
     // MARK: - Transport
 
-    /// READY is the only in-app start target. While recording, the same large
+    /// OFF is the only in-app start target. While recording, the same large
     /// screen target is the deterministic stop fallback.
     func handleScreenTap() {
         if canStopRecording {

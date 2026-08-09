@@ -17,7 +17,7 @@ Ultra. Setup and the remaining checklist: [DEVICE_TESTING.md](docs/operations/DE
 
 ## The interface
 
-One button, the size of the screen. **Grey READY starts; red RECORDING stops.**
+One button, the size of the screen. **Grey OFF starts; red RECORDING stops.**
 The Action Button is launch-or-start: it starts from idle and does nothing while
 a memo is starting, recording, or paused. While recording, a screen tap, Double
 Tap, lowering the wrist for 8 seconds, or exiting WristMemo stops and saves.

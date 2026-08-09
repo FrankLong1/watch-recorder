@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { multipart, transcribe, TranscriptionError, transcriptionFailureStatus } from "./transcribe";
+import { hasTranscriptWords, multipart, transcribe, TranscriptionError, transcriptionFailureStatus } from "./transcribe";
 
 describe("multipart", () => {
   test("does not drain the audio ahead of downstream demand", async () => {
@@ -54,6 +54,15 @@ describe("transcription HTTP status", () => {
   test("only retryable failures become 5xx responses", () => {
     expect(transcriptionFailureStatus(new TranscriptionError("temporary", true))).toBe(502);
     expect(transcriptionFailureStatus(new TranscriptionError("permanent", false))).toBe(422);
+  });
+});
+
+describe("transcript admission", () => {
+  test("requires at least one word before a result can become a memo", () => {
+    expect(hasTranscriptWords("   \n\t ")).toBe(false);
+    expect(hasTranscriptWords("... — !!")).toBe(false);
+    expect(hasTranscriptWords("buy NVDA")).toBe(true);
+    expect(hasTranscriptWords("R2D2")).toBe(true);
   });
 });
 

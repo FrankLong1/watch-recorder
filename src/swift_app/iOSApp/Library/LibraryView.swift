@@ -6,12 +6,11 @@ struct LibraryView: View {
     @Environment(PhoneLibrary.self) private var library
     @Environment(GoogleAuthentication.self) private var authentication
     @State private var searchText = ""
-    @State private var isShowingUploadApproval = false
 
     var body: some View {
         NavigationStack {
             List {
-                if !authentication.isSignedIn || !library.uploadsAreAuthorized {
+                if !authentication.isSignedIn {
                     authenticationSection
                 }
 
@@ -56,7 +55,7 @@ struct LibraryView: View {
                         Menu {
                             Text(email)
                             Button("Sign Out", role: .destructive) {
-                                library.revokeUploadAuthorization()
+                                library.prepareForSignOut()
                                 authentication.signOut()
                                 library.authenticationDidChange()
                             }
@@ -66,14 +65,6 @@ struct LibraryView: View {
                         }
                     }
                 }
-            }
-            .alert(uploadApprovalTitle, isPresented: $isShowingUploadApproval) {
-                Button("Cancel", role: .cancel) {}
-                Button(uploadApprovalButtonTitle) {
-                    library.authorizeUploadsForCurrentAccount()
-                }
-            } message: {
-                Text(uploadApprovalMessage)
             }
         }
     }
@@ -89,7 +80,7 @@ struct LibraryView: View {
                 }
             case .signedOut, .failed:
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Sign in with Google to verify your identity and read your transcript history. Signing in does not upload audio.")
+                    Text("Sign in with Google once to securely transcribe Watch recordings automatically and sync your transcript history. Audio streams through Cloud Run to OpenAI and is not stored in GCP.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     GoogleSignInButton {
@@ -105,55 +96,9 @@ struct LibraryView: View {
                 Label("Google Sign-In is not configured in this build.", systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
             case .signedIn:
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(uploadAuthorizationDescription)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    Button(uploadAuthorizationButtonTitle) {
-                        isShowingUploadApproval = true
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .padding(.vertical, 4)
+                EmptyView()
             }
         }
-    }
-
-    private var uploadAuthorizationDescription: String {
-        let count = library.pendingUploadCount
-        if count == 0 {
-            return "Transcription is off. Enable it once to send future Watch recordings automatically after they are safe on this iPhone."
-        }
-        return "Transcription is off. \(count) recording\(count == 1 ? " is" : "s are") safe on this iPhone and will not upload until you approve."
-    }
-
-    private var uploadAuthorizationButtonTitle: String {
-        let count = library.pendingUploadCount
-        return count == 0
-            ? "Enable Automatic Transcription"
-            : "Review Upload of \(count) Recording\(count == 1 ? "" : "s")"
-    }
-
-    private var uploadApprovalTitle: String {
-        let count = library.pendingUploadCount
-        return count == 0
-            ? "Enable automatic transcription?"
-            : "Upload and transcribe \(count) recording\(count == 1 ? "" : "s")?"
-    }
-
-    private var uploadApprovalButtonTitle: String {
-        let count = library.pendingUploadCount
-        return count == 0
-            ? "Enable Transcription"
-            : "Upload \(count) Recording\(count == 1 ? "" : "s")"
-    }
-
-    private var uploadApprovalMessage: String {
-        let count = library.pendingUploadCount
-        if count == 0 {
-            return "Future recordings will upload to WristMemo's Cloud Run service for OpenAI transcription. Audio is streamed through and is not stored in GCP."
-        }
-        return "The original audio will be streamed through WristMemo's Cloud Run service to OpenAI, then retained only on your devices until the verified hand-off window expires. GCP stores the transcript, not the audio."
     }
 
     private func row(for item: PhoneLibrary.ReviewItem) -> some View {
@@ -196,7 +141,7 @@ struct LibraryView: View {
         case .pending:
             library.uploadsAreAuthorized
                 ? "Waiting to send securely"
-                : "Safe on this iPhone — transcription is off"
+                : "Safe on this iPhone — sign in to transcribe"
         case .uploading: "Transcribing in background…"
         case .uploaded: "Transcript is syncing to this iPhone…"
         case .failed: "Couldn’t transcribe — swipe to retry"
@@ -267,7 +212,7 @@ private struct MemoDetailView: View {
 
     private var processingTitle: String {
         if item.uploadState == .pending && !library.uploadsAreAuthorized {
-            return "Transcription Is Off"
+            return "Sign In to Transcribe"
         }
         return item.uploadState == .failed ? "Transcription Needs Attention" : "Transcribing in Background"
     }
@@ -277,7 +222,7 @@ private struct MemoDetailView: View {
         case .pending:
             library.uploadsAreAuthorized
                 ? "This memo is safely queued on the phone and will send when it can."
-                : "This memo is safe on the phone. Approve transcription from the library before any audio is uploaded."
+                : "This memo is safe on the phone and will upload automatically after Google Sign-In."
         case .uploading: "The original recording is being transcribed."
         case .uploaded: "The service has finished; the transcript is downloading to this iPhone."
         case .failed: "The recording is still safe on this iPhone. Retry after correcting the sign-in, connection, or size issue."

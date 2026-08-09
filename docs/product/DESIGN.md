@@ -5,7 +5,7 @@
 ```
         ┌─────────────────────┐              ┌─────────────────────┐
         │                     │   press ──▶  │                     │
-        │       READY         │              │     RECORDING       │
+        │        OFF          │              │     RECORDING       │
         │       (grey)        │  ◀── press   │       (red)         │
         │                     │              │                     │
         └─────────────────────┘              └─────────────────────┘
@@ -13,11 +13,11 @@
                   └──── compress → store → sync ────────┘
                               (invisible)
 
-  start = Action button · tap READY
+  start = Action button · tap OFF
   stop  = Double Tap · tap screen · wrist-down timeout · exit app
 ```
 
-**The app is one button the size of the screen.** Grey READY starts, red
+**The app is one button the size of the screen.** Grey OFF starts, red
 RECORDING stops. The Action Button is launch-or-start only: it starts from idle
 and does nothing during a live memo. Double Tap only stops; lowering the wrist
 for eight seconds or exiting the app stops an abandoned capture. There is no

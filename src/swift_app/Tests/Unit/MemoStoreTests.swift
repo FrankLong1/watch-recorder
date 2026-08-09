@@ -167,9 +167,9 @@ struct MemoStoreTests {
         try FileManager.default.createDirectory(at: captures, withIntermediateDirectories: true)
         let id = UUID()
         let capture = captures.appendingPathComponent("\(id.uuidString).caf")
-        // 4096 bytes is what `prepareToRecord()` leaves behind — below the
-        // 0.3s minimum, which is 13230 audio bytes.
-        try Data(count: 4096).write(to: capture)
+        // 4096 bytes is what `prepareToRecord()` leaves behind: a container
+        // header with no actual recorded samples.
+        try Data(count: CaptureFormat.prearmedFileBytes).write(to: capture)
 
         let memo = await store.finalize(captureURL: capture, id: id)
 
@@ -177,6 +177,27 @@ struct MemoStoreTests {
         #expect(store.memos.isEmpty)
         #expect(!FileManager.default.fileExists(atPath: capture.path),
                 "rejected capture should be removed from disk")
+    }
+
+    @Test("a short spoken capture is kept")
+    func shortCaptureIsKept() async throws {
+        let root = Self.makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let store = MemoStore(rootURL: root)
+        store.loadIfNeeded()
+
+        let captures = root.appendingPathComponent("Captures", isDirectory: true)
+        try FileManager.default.createDirectory(at: captures, withIntermediateDirectories: true)
+        let id = UUID()
+        let capture = captures.appendingPathComponent("\(id.uuidString).caf")
+        try Self.writeCapture(seconds: 0.1, to: capture)
+
+        let memo = await store.finalize(captureURL: capture, id: id)
+
+        try #require(memo != nil, "a short intentional recording must not be discarded")
+        #expect(memo?.id == id)
+        #expect(memo?.duration ?? 0 > 0)
     }
 
     // MARK: - Retention

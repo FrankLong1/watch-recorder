@@ -25,10 +25,6 @@ final class MemoStore {
     private var didCreateDirectories = false
     private var didLoad = false
 
-    /// Captures shorter than this are the mic never having opened, or a
-    /// pre-armed file that was never recorded into.
-    private static let minimumDuration: TimeInterval = 0.3
-
     /// The app's initialiser. Application Support is the only root the shipping
     /// app ever uses.
     convenience init() {
@@ -123,7 +119,7 @@ final class MemoStore {
             else { continue }
 
             let duration = AudioDuration.of(url)
-            guard duration > Self.minimumDuration else { continue }
+            guard duration > 0 else { continue }
             let createdAt = (try? url.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? Date()
             recovered.append(Memo(
                 id: id,
@@ -223,11 +219,11 @@ final class MemoStore {
         guard let attributes = try? fileManager.attributesOfItem(atPath: captureURL.path) else { return nil }
         let createdAt = recordedAt ?? (attributes[.creationDate] as? Date) ?? Date()
 
-        // Cheap reject before spinning up an AAC encoder: a header-only capture
-        // is a pre-arm that was never recorded into.
+        // A pre-armed recorder has created only its CAF header. Do not turn it
+        // into a memo, but do not use duration as a proxy: an intentional
+        // one-word thought can be under a third of a second.
         let bytes = (attributes[.size] as? Int) ?? 0
-        let minimumBytes = CaptureFormat.bytes(forSeconds: Self.minimumDuration)
-        guard bytes > minimumBytes else {
+        guard bytes > CaptureFormat.prearmedFileBytes else {
             try? fileManager.removeItem(at: captureURL)
             return nil
         }
@@ -275,7 +271,7 @@ final class MemoStore {
         }
 
         guard let filename, let duration else { return nil }
-        guard duration > Self.minimumDuration else {
+        guard duration > 0 else {
             try? fileManager.removeItem(at: memosDirectory.appendingPathComponent(filename))
             return nil
         }

@@ -17,8 +17,15 @@ enum CaptureFormat {
     private static var bytesPerFrame: Int { (bitDepth / 8) * channels }
 
     /// Audio bytes a capture of `seconds` occupies, ignoring the container
-    /// header. Used to reject a pre-armed file that was never recorded into.
+    /// header. Kept here so storage and tests can reason about capture sizes
+    /// without linking AVFoundation.
     static func bytes(forSeconds seconds: TimeInterval) -> Int {
         Int(sampleRate * Double(bytesPerFrame) * seconds)
     }
+
+    /// `AVAudioRecorder.prepareToRecord()` creates this CAF before it has
+    /// written a single sample. It is the only safe size-based rejection: a
+    /// spoken one-word memo can be much shorter than an arbitrary duration
+    /// threshold, but a file with only this header is not a capture.
+    static let prearmedFileBytes = 4_096
 }

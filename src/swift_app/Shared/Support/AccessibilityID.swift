@@ -19,7 +19,9 @@ enum AccessibilityID {
     /// label into a single accessibility node. Shared so a copy edit breaks the
     /// build rather than the test.
     enum StatusText {
-        static let ready = "READY"
+        static let off = "OFF"
+        static let tapToStartRecording = "Tap to start recording"
+        static let idle = "\(off)\n\(tapToStartRecording)"
         static let recording = "RECORDING"
         static let paused = "PAUSED"
         static let micOff = "MIC OFF\nALLOW IN SETTINGS"

@@ -161,7 +161,7 @@ variable "user_id" {
 }
 
 variable "max_instances" {
-  description = "Cloud Run ceiling. Voice memos arrive one at a time; this only bounds a runaway."
+  description = "Cloud Run ceiling. One instance keeps the shared Cloud SQL connection budget bounded while memo uploads queue safely."
   type        = number
-  default     = 3
+  default     = 1
 }

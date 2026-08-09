@@ -3,7 +3,7 @@ import XCTest
 /// Drives the watch UI the way a person does.
 ///
 /// The interface is one full-screen button, so every assertion here is about
-/// the same element: READY starts and RECORDING stops. That word is the
+/// the same element: OFF starts and RECORDING stops. That state is the
 /// button's accessibility *value* rather than a
 /// separate label — SwiftUI folds a button's contents into one accessibility
 /// node, so there is nothing else to query, and asserting on a `staticText`
@@ -61,12 +61,12 @@ final class RecordingFlowUITests: XCTestCase {
         return control
     }
 
-    /// READY is the explicit in-app start target; RECORDING turns the same
+    /// OFF is the explicit in-app start target; RECORDING turns the same
     /// surface into the deterministic stop fallback.
-    func testReadyStartsAndRecordingStops() {
+    func testOffStartsAndRecordingStops() {
         let app = launchApp()
-        waitForStatus(app, AccessibilityID.StatusText.ready)
-        attachScreenshot(app, named: "1-ready")
+        waitForStatus(app, AccessibilityID.StatusText.idle)
+        attachScreenshot(app, named: "1-off")
 
         button(app).tap()
         waitForStatus(app, AccessibilityID.StatusText.recording)
@@ -76,15 +76,15 @@ final class RecordingFlowUITests: XCTestCase {
         waitForStatus(app, AccessibilityID.StatusText.completionReceipt)
         attachScreenshot(app, named: "3-message-received")
         // The receipt is visual only; capture and delivery work behind it.
-        waitForStatus(app, AccessibilityID.StatusText.ready)
-        attachScreenshot(app, named: "4-ready-again")
+        waitForStatus(app, AccessibilityID.StatusText.idle)
+        attachScreenshot(app, named: "4-off-again")
     }
 
     /// The second thought arrives while the first is still encoding. Starting
     /// again immediately must work, because nothing blocks after a stop.
     func testCanStartAgainImmediatelyAfterStopping() {
         let app = launchApp()
-        waitForStatus(app, AccessibilityID.StatusText.ready)
+        waitForStatus(app, AccessibilityID.StatusText.idle)
 
         button(app).tap()
         waitForStatus(app, AccessibilityID.StatusText.recording)

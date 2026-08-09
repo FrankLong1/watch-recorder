@@ -18,7 +18,7 @@ struct RecordComplication: Widget {
                 AccessoryWidgetBackground()
                 Button(intent: StartRecordingIntent()) {
                     Image(systemName: "mic.fill")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.custom("Helvetica-Bold", size: 18))
                         .foregroundStyle(.red)
                 }
                 .buttonStyle(.plain)

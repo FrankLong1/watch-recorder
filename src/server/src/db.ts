@@ -14,6 +14,10 @@ const METADATA_TOKEN_URL =
 const TOKEN_ROTATION_MARGIN_MS = 5 * 60 * 1000;
 /// IAM tokens expire after an hour, so connections are recycled before then.
 const IAM_CONNECTION_MAX_LIFETIME_SECONDS = 45 * 60;
+/// This service shares a small Cloud SQL instance. A memo keeps its advisory-lock
+/// connection while transcription runs, so a large per-instance pool would turn
+/// a few concurrent Cloud Run instances into a connection-slot outage.
+export const DATABASE_CONNECTIONS_PER_INSTANCE = 2;
 
 export class DatabaseUnavailableError extends Error {}
 export class MemoInProgressError extends Error {}
@@ -103,7 +107,7 @@ export function createMemoStore(config: DatabaseConfig): MemoStore {
   function client(): SQL {
     if (sql) return sql;
     if (config.kind === "url") {
-      sql = newSqlClient({ url: config.url, max: 5 });
+      sql = newSqlClient({ url: config.url, max: DATABASE_CONNECTIONS_PER_INSTANCE });
       return sql;
     }
     sql = newSqlClient({
@@ -111,7 +115,7 @@ export function createMemoStore(config: DatabaseConfig): MemoStore {
       username: config.user,
       password: iamAccessToken,
       database: config.name,
-      max: 5,
+      max: DATABASE_CONNECTIONS_PER_INSTANCE,
       maxLifetime: IAM_CONNECTION_MAX_LIFETIME_SECONDS,
     });
     return sql;
@@ -220,7 +224,8 @@ export function createMemoStore(config: DatabaseConfig): MemoStore {
               'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
             ) AS "transcribedAt"
           FROM wristmemo.memos
-          WHERE transcribed_at IS NOT NULL
+          WHERE transcript <> ''
+            AND transcribed_at IS NOT NULL
             AND (transcribed_at, id) > (${cursor.transcribedAt}::timestamptz, ${cursor.id}::uuid)
           ORDER BY transcribed_at ASC, id ASC
           LIMIT ${limit}
@@ -244,7 +249,7 @@ export function createMemoStore(config: DatabaseConfig): MemoStore {
             ) AS "transcribedAt"
           FROM wristmemo.memos
           WHERE user_id = ${userId}
-            AND transcript IS NOT NULL
+            AND transcript <> ''
             AND transcribed_at IS NOT NULL
             AND (transcribed_at, id) > (${cursor.transcribedAt}::timestamptz, ${cursor.id}::uuid)
           ORDER BY transcribed_at ASC, id ASC

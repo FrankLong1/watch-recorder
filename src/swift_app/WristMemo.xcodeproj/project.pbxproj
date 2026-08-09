@@ -66,9 +66,9 @@
 		C0DEC0DE0000000000000101 /* GoogleAuthentication.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEC0DE0000000000000102 /* GoogleAuthentication.swift */; };
 		C0DEC0DE0000000000000104 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = C0DEC0DE0000000000000105 /* GoogleSignIn */; };
 		C0DEC0DE0000000000000106 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = C0DEC0DE0000000000000107 /* GoogleSignInSwift */; };
-		C0DEC0DE0000000000000201 /* AudioUploadConsent.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEC0DE0000000000000204 /* AudioUploadConsent.swift */; };
-		C0DEC0DE0000000000000202 /* AudioUploadConsent.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEC0DE0000000000000204 /* AudioUploadConsent.swift */; };
-		C0DEC0DE0000000000000203 /* AudioUploadConsentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEC0DE0000000000000205 /* AudioUploadConsentTests.swift */; };
+		C0DEC0DE0000000000000211 /* UploadQueuePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEC0DE0000000000000213 /* UploadQueuePolicy.swift */; };
+		C0DEC0DE0000000000000212 /* UploadQueuePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEC0DE0000000000000213 /* UploadQueuePolicy.swift */; };
+		C0DEC0DE0000000000000215 /* UploadQueuePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEC0DE0000000000000214 /* UploadQueuePolicyTests.swift */; };
 		C599E4D892EA74E5FAB80AB5 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FF4F345E89E8DB8E583DC96 /* LibraryView.swift */; };
 		C83A9F6228B077FEF7FABA83 /* AudioCompressor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7567CDB7BBFB1C0F2E916475 /* AudioCompressor.swift */; };
 		D0694CC41CABB3130B7B85BA /* SharedConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A0075E4CFD286E9FE8E7D55 /* SharedConfig.swift */; };
@@ -142,8 +142,8 @@
 		C0DEC0DE0000000000000001 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
 		C0DEC0DE0000000000000002 /* Signing.local.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.local.xcconfig.example; sourceTree = "<group>"; };
 		C0DEC0DE0000000000000102 /* GoogleAuthentication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleAuthentication.swift; sourceTree = "<group>"; };
-		C0DEC0DE0000000000000204 /* AudioUploadConsent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioUploadConsent.swift; sourceTree = "<group>"; };
-		C0DEC0DE0000000000000205 /* AudioUploadConsentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioUploadConsentTests.swift; sourceTree = "<group>"; };
+		C0DEC0DE0000000000000213 /* UploadQueuePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadQueuePolicy.swift; sourceTree = "<group>"; };
+		C0DEC0DE0000000000000214 /* UploadQueuePolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadQueuePolicyTests.swift; sourceTree = "<group>"; };
 		2485CEB2051BDEF12B42AF21 /* WristMemoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WristMemoApp.swift; sourceTree = "<group>"; };
 		2A993087E3E52FF396FE5E3A /* iOSApp-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "iOSApp-Info.plist"; sourceTree = "<group>"; };
 		2F65A747EC963F2F4CD5E5E9 /* WristMemoShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WristMemoShortcuts.swift; sourceTree = "<group>"; };
@@ -242,7 +242,7 @@
 		0D50372E4F6C8D98E997F5E2 /* Unit */ = {
 			isa = PBXGroup;
 			children = (
-				C0DEC0DE0000000000000205 /* AudioUploadConsentTests.swift */,
+				C0DEC0DE0000000000000214 /* UploadQueuePolicyTests.swift */,
 				A905B2C3D4E5F60718293A4B /* CaptureStartFailureTests.swift */,
 				47E9ECE16B2525FB03953904 /* FormattingTests.swift */,
 				0E289DD08F6F35EA0F25E1EC /* MemoStoreTests.swift */,
@@ -288,7 +288,7 @@
 		A1B2C3D40000000000000103 /* Policy */ = {
 			isa = PBXGroup;
 			children = (
-				C0DEC0DE0000000000000204 /* AudioUploadConsent.swift */,
+				C0DEC0DE0000000000000213 /* UploadQueuePolicy.swift */,
 				A1B2C3D4E5F60718293A4B61 /* Retention.swift */,
 			);
 			path = Policy;
@@ -769,7 +769,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1B2C3D40000000000000012 /* Retention.swift in Sources */,
-				C0DEC0DE0000000000000201 /* AudioUploadConsent.swift in Sources */,
+				C0DEC0DE0000000000000211 /* UploadQueuePolicy.swift in Sources */,
 				A06D7DAD745C123643EA2AF8 /* WristMemoApp.swift in Sources */,
 				C0DEC0DE0000000000000101 /* GoogleAuthentication.swift in Sources */,
 				3D2079B042B68CAAF76E7776 /* PhoneLibrary.swift in Sources */,
@@ -811,8 +811,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C0DEC0DE0000000000000203 /* AudioUploadConsentTests.swift in Sources */,
-				C0DEC0DE0000000000000202 /* AudioUploadConsent.swift in Sources */,
+				C0DEC0DE0000000000000215 /* UploadQueuePolicyTests.swift in Sources */,
+				C0DEC0DE0000000000000212 /* UploadQueuePolicy.swift in Sources */,
 				A1B2C3D40000000000000014 /* RetentionTests.swift in Sources */,
 				7EFABCEA5A668807D9932649 /* FormattingTests.swift in Sources */,
 				F6A55909190FAD8C9B981694 /* MemoStoreTests.swift in Sources */,
@@ -918,7 +918,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 10;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/WatchApp-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = WristMemo;
@@ -926,7 +926,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(WRISTMEMO_WATCH_BUNDLE_ID)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -944,7 +944,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Config/iOSApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 10;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/iOSApp-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = WristMemo;
@@ -954,7 +954,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(WRISTMEMO_APP_BUNDLE_ID)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -1029,7 +1029,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 10;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/WatchApp-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = WristMemo;
@@ -1037,7 +1037,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(WRISTMEMO_WATCH_BUNDLE_ID)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -1083,7 +1083,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 10;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/WatchControls-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "WristMemo Controls";
@@ -1092,7 +1092,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(WRISTMEMO_CONTROLS_BUNDLE_ID)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -1107,7 +1107,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 10;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/WatchControls-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "WristMemo Controls";
@@ -1116,7 +1116,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(WRISTMEMO_CONTROLS_BUNDLE_ID)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -1134,7 +1134,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Config/iOSApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 10;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/iOSApp-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = WristMemo;
@@ -1144,7 +1144,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(WRISTMEMO_APP_BUNDLE_ID)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;

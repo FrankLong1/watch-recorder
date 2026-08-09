@@ -23,8 +23,8 @@ final class GoogleAuthentication {
     }
 
     private(set) var state: State
-    /// Google's stable account identifier (`sub`). Audio-upload consent is
-    /// bound to this value, never to a mutable email address.
+    /// Google's stable account identifier (`sub`). Server-side row ownership
+    /// and the upload allowlist use this value, never a mutable email address.
     private(set) var accountIdentifier: String?
     private let log = SharedConfig.logger("GoogleAuth")
     private let clientID: String?

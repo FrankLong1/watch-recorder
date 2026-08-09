@@ -40,6 +40,13 @@ export interface Transcription {
   model: string;
 }
 
+/// A transcription containing only whitespace or punctuation is not a spoken
+/// memo. Keep this deliberately small and deterministic: it is a downstream
+/// admission rule, never a reason to reject or delete the source recording.
+export function hasTranscriptWords(text: string): boolean {
+  return /[\p{L}\p{N}]/u.test(text);
+}
+
 export function multipart(model: string, audio: ReadableStream<Uint8Array>, audioLength: number) {
   const boundary = `----wristmemo${crypto.randomUUID().replaceAll("-", "")}`;
   const encoder = new TextEncoder();
