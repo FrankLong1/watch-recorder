@@ -4,9 +4,8 @@ import WatchKit
 ///
 /// Cold launch dominates press-to-record time and there is no public "pre-warm
 /// my watch app" API. What exists is indirect: watchOS keeps apps in the Dock
-/// in memory, a complication on the active face asks the system to keep the app
-/// ready to launch, and background refresh keeps the process from being
-/// jettisoned. This schedules the refresh half. See LATENCY.md.
+/// in memory, while background refresh helps keep the process from being
+/// jettisoned. This schedules that refresh. See LATENCY.md.
 ///
 /// The budget is shared across apps in the Dock — roughly one wake per hour —
 /// so this is a nudge, not a guarantee.

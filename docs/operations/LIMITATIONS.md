@@ -10,7 +10,19 @@ keeps that choice with the user.
 
 **Consequence:** first-run instructions matter. See README.
 
-## 2. Recording cannot start from the background
+## 2. An Action Button Control also exists in the system Control gallery
+
+WidgetKit Controls are the only supported third-party Action Button mechanism,
+and watchOS publishes those Controls to its system Control surfaces as well.
+`ControlWidgetConfiguration` has no supported modifier for Action-Button-only
+visibility, and `AppIntent.perform()` receives no invocation-source context.
+
+**Consequence:** WristMemo can make the Action Button its sole product and
+in-app start affordance, remove its complication and Siri/Shortcuts exposure,
+and keep idle screen taps inert. It cannot technically reject a user who finds
+and invokes the same Control from Apple's Control gallery.
+
+## 3. Recording cannot start from the background
 
 The microphone only opens for a foreground app. `WKBackgroundModes: audio` lets
 a recording that *started* in the foreground continue when the wrist drops, but
@@ -23,7 +35,7 @@ it cannot be used to begin one. Apple's background sessions documentation:
 than recording headlessly. There is no way to record with the screen off from a
 cold start.
 
-## 3. `AudioRecordingIntent` requires a Live Activity
+## 4. `AudioRecordingIntent` requires a Live Activity
 
 Adopting it obliges you to start a Live Activity and keep it alive:
 
@@ -32,10 +44,10 @@ Adopting it obliges you to start a Live Activity and keep it alive:
 A watchOS app cannot originate a Live Activity — on watchOS they mirror from
 iPhone. Adopting the protocol on watch would guarantee the recording stops.
 
-**Consequence:** this app uses a plain `AppIntent`, so it does not get the
+**Consequence:** this app uses an `OpenIntent`, so it does not get the
 system's audio-recording indicator treatment that the protocol provides.
 
-## 4. Background recording is CPU-limited and revocable
+## 5. Background recording is CPU-limited and revocable
 
 Once backgrounded, the app runs under tighter CPU limits and the system may
 suspend it under memory or thermal pressure. Extended runtime sessions do not
@@ -46,7 +58,7 @@ types that exist are invalidated when the app leaves the foreground.
 decodable file, and orphaned captures are recovered on the next launch. Long
 unattended recordings are still not something watchOS guarantees.
 
-## 5. Controls mirrored from iPhone cannot foreground the iPhone app
+## 6. Controls mirrored from iPhone cannot foreground the iPhone app
 
 watchOS 26 surfaces iOS controls on the watch automatically, but per WWDC25:
 
@@ -57,15 +69,15 @@ watchOS 26 surfaces iOS controls on the watch automatically, but per WWDC25:
 control could never launch anything for this use case. That is why
 `WatchControls` is a watchOS target.
 
-## 6. The Action button is Ultra-only
+## 7. The Action button is Ultra-only
 
 Series and SE models have no Action button.
 
-**Consequence:** `StartRecordingIntent` is also exposed through
-`AppShortcutsProvider`, so non-Ultra users get a Siri phrase and a Shortcuts
-action. It is one hop slower, and that hop cannot be removed.
+**Consequence:** the current Action-Button-only product contract has no start
+path on those watches. Adding one later requires a deliberate separate product
+decision.
 
-## 7. Control state is not live
+## 8. Control state is not live
 
 A control's rendering is provided by the extension, which cannot observe the
 app's audio session. There is no supported way to show "recording in progress"
@@ -73,15 +85,15 @@ on the Action button or in Control Center from a watch app.
 
 **Consequence:** a button ("start a memo"), not a toggle.
 
-## 8. Battery shutdown gives no warning
+## 9. Battery shutdown gives no warning
 
 watchOS has no "about to power off" callback.
 
 **Consequence:** the app polls battery level every ~5 seconds while recording
 and auto-saves below 5%. A sudden shutdown above that threshold still relies on
-crash recovery (limitation 4).
+crash recovery (limitation 5).
 
-## 9. Sync needs a companion app and is best-effort
+## 10. Sync needs a companion app and is best-effort
 
 `WCSession.transferFile` requires a counterpart iOS app and delivers on the
 system's schedule — it can be minutes, or longer if the phone is away.

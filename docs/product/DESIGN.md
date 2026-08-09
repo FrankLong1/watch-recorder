@@ -13,13 +13,14 @@
                   └──── compress → store → sync ────────┘
                               (invisible)
 
-  start = Action button · tap OFF
+  start = Action button only
   stop  = Double Tap · tap screen · wrist-down timeout · exit app
 ```
 
-**The app is one button the size of the screen.** Grey OFF starts, red
-RECORDING stops. The Action Button is launch-or-start only: it starts from idle
-and does nothing during a live memo. Double Tap only stops; lowering the wrist
+**The app has one stop target the size of the screen.** Grey OFF is status and
+says PRESS ACTION BUTTON; red RECORDING says TAP TO STOP. The Action Button is
+the only start route: it starts from idle and does nothing during a live memo.
+Double Tap only stops; lowering the wrist
 for eight seconds or exiting the app stops an abandoned capture. There is no
 timer, meter, cancel, confirmation, list, transcript, settings screen or
 navigation — every one of those was removed rather than never built. What is
@@ -56,7 +57,7 @@ Launching background agent…
 
 It is a fixed local receipt shown in the same main-actor turn as `.stop`, not a
 new capture phase and not an assertion that the phone, transcription service,
-or a downstream agent has completed. The model is already idle and a screen or
+or a downstream agent has completed. The model is already idle and an
 Action-button press starts the next memo immediately. That is why the phrase
 can be satisfying without putting the network on the capture path.
 
@@ -85,13 +86,13 @@ Controls act through App Intents — there is no closure-based alternative. The
 custom intent, `StartRecordingIntent`, does almost nothing:
 
 ```swift
-static let supportedModes: IntentModes = .foreground(.immediate)
+struct StartRecordingIntent: OpenIntent
 ```
 
-`supportedModes` is the watchOS 26 replacement for `openAppWhenRun`, which is
-now deprecated. `.immediate` foregrounds the app the instant the button is
-pressed instead of waiting for `perform()` to return — that difference is most
-of the "instantaneous" feel.
+`OpenIntent` is the foreground-launch contract accepted directly by
+`ControlWidgetButton`. A generic foreground `AppIntent` produced the system
+"Your agent failed" error on the Ultra simulator; the `OpenIntent` control path
+successfully opens WristMemo and begins recording.
 
 The intent does **not** record. It cannot: watchOS only lets a foreground app
 open the microphone. So its job is to bring the app forward and leave a marker.
@@ -189,9 +190,9 @@ sweep is cheap and idempotent.
 
 ### Hand-off between processes
 
-`.foreground(.immediate)` means the system performs the intent inside the app's
-own process, so the hand-off is a plain in-process latch: `perform()` sets a
-flag and posts a notification, and `RecorderModel` reads the flag in `init`.
+The system performs this `OpenIntent` inside the app's own process, so the
+hand-off is a plain in-process latch: `perform()` sets a flag and posts a
+notification, and `RecorderModel` reads the flag in `init`.
 
 It is a latch rather than only a notification because ordering is not
 guaranteed — the intent can run before `RecorderModel` exists, and a
@@ -224,7 +225,7 @@ src/swift_app/
     UI/                    bootstrap + the single record screen
     Diagnostics/           time-to-first-sample instrumentation
   iOSApp/                  companion app, library, and ingest client
-  WatchControls/Widgets/   ControlWidget and complication extension
+  WatchControls/Widgets/   Action Button Control extension
   Tests/                   unit and UI test bundles
 ```
 

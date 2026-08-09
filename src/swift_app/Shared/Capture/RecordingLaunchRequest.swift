@@ -2,8 +2,8 @@ import Foundation
 
 /// The hand-off between `StartRecordingIntent` and the recorder.
 ///
-/// `.foreground(.immediate)` means the system performs the intent inside the
-/// app's own process, so this is deliberately just an in-process latch. It is a
+/// The control's `OpenIntent` runs inside the foregrounded app process, so this
+/// is deliberately just an in-process latch. It is a
 /// latch rather than a notification because ordering is not guaranteed: the
 /// intent can run before `RecorderModel` exists, and a notification posted then
 /// would be dropped. A flag set before and read after works either way.

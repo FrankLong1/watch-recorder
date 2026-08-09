@@ -2,9 +2,9 @@ import SwiftUI
 
 /// The entire app.
 ///
-/// One control, the size of the screen. Grey OFF is the only in-app start
-/// surface; red RECORDING turns that same large target into a deterministic
-/// stop. Double Tap is enabled only while it stops. No timer, no meter, no
+/// The Action Button is the only start surface. Grey OFF is status and
+/// instruction; red RECORDING turns the full screen into a deterministic stop.
+/// Double Tap is enabled only while it stops. No timer, no meter, no
 /// cancel, no list, no settings, no navigation: everything a memo needs after
 /// it is spoken — compress, sync, upload, delete itself — happens without the
 /// user, so there is nothing to show and nothing to decide.
@@ -56,20 +56,32 @@ struct RecordScreen: View {
                             .fill(Color.white.opacity(0.25))
                             .frame(width: 96, height: 1)
 
-                        Text(AccessibilityID.StatusText.tapToRecord)
+                        Text(AccessibilityID.StatusText.pressActionButton)
                             .font(.custom("Helvetica", size: 9, relativeTo: .caption2))
                             .tracking(0.8)
                             .textCase(.uppercase)
                             .foregroundStyle(Color(white: 0.54))
                     }
                 } else if model.phase == .recording {
-                    Text(AccessibilityID.StatusText.recording)
-                        .font(
-                            .custom("Helvetica", size: 17, relativeTo: .headline)
-                                .weight(.medium)
-                        )
-                        .tracking(2.4)
-                        .padding(.leading, 2.4)
+                    VStack(spacing: 7) {
+                        Text(AccessibilityID.StatusText.recording)
+                            .font(
+                                .custom("Helvetica", size: 17, relativeTo: .headline)
+                                    .weight(.medium)
+                            )
+                            .tracking(2.4)
+                            .padding(.leading, 2.4)
+
+                        Rectangle()
+                            .fill(Color.white.opacity(0.34))
+                            .frame(width: 96, height: 1)
+
+                        Text(AccessibilityID.StatusText.tapToStop)
+                            .font(.custom("Helvetica", size: 9, relativeTo: .caption2))
+                            .tracking(0.8)
+                            .textCase(.uppercase)
+                            .foregroundStyle(Color.white.opacity(0.72))
+                    }
                 } else {
                     // Pauses, permission failures, and notices stay visually
                     // distinct from the normal two-state capture surface.
@@ -92,12 +104,16 @@ struct RecordScreen: View {
         // an incidental hand gesture from becoming a second start route.
         .handGestureShortcut(.primaryAction, isEnabled: model.canStopRecording)
         .accessibilityIdentifier(AccessibilityID.recordButton)
-        .accessibilityLabel("Record")
+        .accessibilityLabel("WristMemo")
         // The word on screen, exposed as the button's value rather than a
         // separate element: SwiftUI folds a button's label into one
         // accessibility node, so a `Text` inside it is not separately queryable.
         .accessibilityValue(accessibilityStatus)
-        .accessibilityHint(model.canStopRecording ? "Stops and saves the memo" : "Starts a memo")
+        .accessibilityHint(
+            model.canStopRecording
+                ? "Double-tap to stop and save the memo"
+                : "Press the Action Button to start recording"
+        )
     }
 
     private var status: String {
@@ -114,7 +130,10 @@ struct RecordScreen: View {
     }
 
     private var accessibilityStatus: String {
-        model.completionReceipt.map { "\($0.title)\n\($0.detail)" } ?? status
+        if let receipt = model.completionReceipt {
+            return "\(receipt.title)\n\(receipt.detail)"
+        }
+        return model.phase == .recording ? AccessibilityID.StatusText.recordingControl : status
     }
 
     private var backgroundColour: Color {

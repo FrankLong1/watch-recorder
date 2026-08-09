@@ -70,11 +70,12 @@ become a tiny memo manager merely because it can render those things.
 
 ### Capture interaction contract
 
-Keep start and stop triggers explicit and one-directional. The only ways to
-start a memo are the assigned Action Button control and a tap on the in-app
-**READY** surface. The Action Button is launch-or-start: when idle, it opens
-WristMemo and starts; when already starting, recording, or paused, it does
-nothing. Double Tap must never start a memo.
+Keep start and stop triggers explicit and one-directional. The only way to
+start a memo is the assigned Action Button control. When idle, it opens
+WristMemo and starts; when already starting, recording, or paused, the app does
+nothing beyond the system's ordinary Action Button feedback. The idle **OFF**
+surface is status, not a control. Screen taps and Double Tap must never start a
+memo.
 
 Once recording, the intentional stop routes are Double Tap, a tap on the full
 screen, lowering the wrist for the short inactivity timeout, and exiting the
@@ -87,7 +88,6 @@ warning, save, or failure haptics.
 flowchart TD
     idle["Watch idle / screen asleep"]
     action["Press Action Button"]
-    ready["Open WristMemo\nTap READY"]
     recording["Recording\nmic live"]
     doubletap["Double Tap fingers"]
     screen["Tap screen"]
@@ -96,7 +96,6 @@ flowchart TD
     saved["Stop recording\nSave audio locally"]
 
     idle --> action --> recording
-    idle --> ready --> recording
     recording --> doubletap --> saved
     recording --> screen --> saved
     recording --> wristdown --> saved
@@ -109,8 +108,8 @@ flowchart TD
 For every watch control, ask: *if this disappeared, would a real thought become
 harder to capture safely?* If not, remove it or move it downstream.
 
-- Start belongs on the Action button / control or the single in-app READY
-  surface, not behind a sequence of in-app choices.
+- Start belongs only on the assigned Action Button control. The in-app OFF
+  surface explains that contract but never starts a recording.
 - Stopping needs one deterministic fallback surface because every automatic or
   gesture path can fail. Double Tap, the full-screen stop target, wrist-down
   inactivity, app exit, and silence should remove the need to use it most of the

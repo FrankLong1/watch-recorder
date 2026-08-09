@@ -56,12 +56,12 @@ That produces a deliberately small surface:
 
 | Control or screen | Target | Why it stays or goes |
 |---|---|---|
-| Action button / Control / complication | **Keep** | Intentional start without app hunting. |
-| Double Tap and second Action press | **Add when verified** | Remove the need to look down to stop. |
+| Assigned Action Button Control | **Keep** | Sole intentional start without app hunting. |
+| Double Tap | **Keep for stop only** | Removes the need to look down to stop. |
 | Silence arm-warn-veto | **Keep as default behaviour** | Ends normal thoughts without a deliberate action. |
 | One large Stop fallback | **Keep** | Deterministic escape hatch when gesture or silence fails. |
 | Cancel / Discard | **Challenge hard** | Deletes the sole source of truth; empty accidental captures can be handled safely instead. |
-| In-app Record button | **Demote to fallback** | The dedicated external trigger is the product. Keep only where it enables a genuine non-Ultra/direct-launch path. |
+| In-app Record button | **Remove** | It creates an ambiguous second start contract. |
 | Auto-stop toggle on the recording watch | **Move out of the normal path** | A safe default beats a per-capture setting; exceptional configuration belongs downstream. |
 | Timer and recording indicator | **Keep, passive** | Reassures a glance without demanding interaction. |
 | Level meter | **Optional / defer** | It provides little capture value unless hardware tests show it prevents a real problem. |
@@ -72,7 +72,8 @@ is to make the fallback so rarely needed that the normal experience has no
 buttons at all: press to begin; speak; stop happens naturally; feel confirmation.
 
 **This table has since been actioned, and it went further than "demote".** The
-watch UI is now a single full-screen button — grey READY, red RECORDING — and
+watch UI is now a full-screen status/stop surface — grey OFF instructs PRESS
+ACTION BUTTON, red RECORDING instructs TAP TO STOP — and
 the timer, level meter, auto-stop toggle, memo list, cancel and save
 confirmation are gone rather than demoted. The "one large Stop fallback" and the
 "in-app Record button" turned out to be the same control as each other and as
@@ -135,10 +136,9 @@ an 8-second wrist-down timeout, and app exit provide layered ways out. The
 remaining work is to make each arrow dependable on a real wrist, then make the
 memo useful at the other end.
 
-For non-Ultra watches, a complication or Siri remains a worse start path. Do not
-pretend otherwise. The right strategy is to make the primary Ultra interaction
-excellent, retain thin universal fallbacks, and measure whether another capture
-surface solves an actual problem.
+Series and SE watches do not have this capture start path. A future non-Ultra
+surface needs an explicit product decision rather than quietly adding another
+meaning to the watch screen.
 
 ## 1. Remove invocation friction
 
@@ -157,19 +157,17 @@ necessary:
 Do not build a tutorial carousel, route setup, folder selection, or settings
 tour in this moment. The first-run goal is one successful capture.
 
-### Start alternatives should be adapters, not separate products
+### Keep the start contract singular
 
-Use the same `StartRecordingIntent` behind a Control Center control,
-complication, Smart Stack surface, and Siri shortcut. They are availability
-fallbacks, not invitations to create different workflows.
+`StartRecordingIntent` is not discoverable in Siri or Shortcuts, and WristMemo
+does not publish a start complication. The assigned Action Button is the sole
+product start affordance. WidgetKit also lists an Action Button Control in the
+system's Control gallery; watchOS 26 exposes no API to identify or reject that
+alternate invocation source. See [Limitations](LIMITATIONS.md).
 
-Useful experiments, in order:
-
-1. **An elapsed-time Smart Stack stop surface.** This closes the Return-to-Clock
-   hole on longer recordings and helps watches without an Action button.
-2. **A phone lock-screen / shortcut capture fallback.** Only if dogfooding shows
-   real thoughts occur while the watch is unavailable. It must preserve the same
-   no-picker start contract.
+A future phone or non-Ultra capture surface needs its own explicit product
+decision. It should not quietly appear as another way to trigger this watch
+recorder.
 
 Avoid speculative motion gestures, voice wake words, or a permanent listening
 mode. They create false starts, privacy cost, and new things to remember.
@@ -199,8 +197,8 @@ These are implemented and remain correct:
   encoder setup out of the press path.
 - Defer index loading, WatchConnectivity setup, orphan recovery, compression,
   and storage cleanup until capture is underway.
-- Keep the app more likely to be warm with a complication, Dock placement, and
-  background-refresh requests. These are hints, not guarantees.
+- Keep the app more likely to be warm with Dock placement and background-refresh
+  requests. These are hints, not guarantees.
 
 Further experiments worth measuring before adopting:
 

@@ -39,11 +39,10 @@ thought occurs
 There is no title, destination, route, tag, transcript, folder, confirmation
 screen, or post-recording decision.
 
-The Action button is the primary start affordance. A Control Center control,
-complication, and Siri are fallbacks using the same intent, not different
-workflows. The app-opening path can be an intentional capture fallback only if
-real use shows it is needed; it should never become a home screen people must
-navigate before they can speak.
+The assigned Action button is the sole start affordance. Opening the app shows
+status and instruction but cannot start a memo; a screen tap is stop-only.
+Control Center, complications, Siri, and Double Tap must not silently become
+alternate start workflows.
 
 ## The boundary
 
@@ -80,11 +79,11 @@ way to make the wrong thing happen. Apply this test to each one:
 
 | Surface | Direction | Rationale |
 |---|---|---|
-| Action button / control / complication | Keep | The intentional start mechanism. |
+| Assigned Action Button control | Keep | The sole intentional start mechanism. |
 | Double Tap to Stop | Keep when available | Removes the need to look and tap while ending. |
 | Silence arm → warn → veto | Keep as default behaviour | Makes ordinary endings require no intentional action. |
 | One large Stop fallback | Keep | Automatic and gesture paths are fallible; capture must remain controllable. |
-| Record button inside the app | Demote | It is a fallback, not the centre of the experience. |
+| Record button inside the app | Exclude | It creates a second start contract and makes the full-screen tap ambiguous. |
 | Cancel / Discard | Challenge hard | It can destroy the only source recording. Empty accidental captures should be handled safely instead. |
 | Per-capture settings, including auto-stop | Move out | A safe default beats a choice at the moment of thought. |
 | Lists, routes, playback, transcripts, editing | Exclude | These are later review and management tasks. |
@@ -102,8 +101,8 @@ between press and durable first sample:
 - pre-arm the next capture file and recorder while idle;
 - defer every non-audio task—index loading, sync setup, compression, recovery,
   cleanup, and view detail—until capture is underway; and
-- keep the app more likely to be warm using the complication, Dock placement,
-  and background-refresh hints.
+- keep the app more likely to be warm using Dock placement and
+  background-refresh hints.
 
 The only haptic start promise is **speak now**: the microphone is live and the
 first sample is reaching the capture file. There is no press-acknowledgement

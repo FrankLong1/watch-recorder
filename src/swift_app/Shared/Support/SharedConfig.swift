@@ -19,10 +19,6 @@ enum SharedConfig {
     /// already configured, so treat it as permanent.
     static let recordControlKind = "\(identifierPrefix).control.start-recording"
 
-    /// Watch-face complication. Keeping one on the active face is what nudges
-    /// the system to hold the app in memory — see LATENCY.md.
-    static let complicationKind = "\(identifierPrefix).complication.record"
-
     /// One subsystem for every logger, because the documented device-debugging
     /// workflow filters on it: `log stream --predicate 'subsystem == "…"'`.
     /// A typo would drop a category out of that stream with no build error.

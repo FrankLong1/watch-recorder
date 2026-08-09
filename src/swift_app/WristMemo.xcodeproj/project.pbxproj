@@ -48,7 +48,6 @@
 		59D2E924883C3F75135DAFBA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 087FC6EE93EAFFBD66585871 /* Assets.xcassets */; };
 		60649AE238BFC7F2C4EB9E7C /* WatchSyncClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 796A3395BAC882FAE5DD6938 /* WatchSyncClient.swift */; };
 		60C115C11C175C1B155B8C61 /* AudioDuration.swift in Sources */ = {isa = PBXBuildFile; fileRef = C264870A06619121DFC7D192 /* AudioDuration.swift */; };
-		6AE6462E492BF876F118B903 /* RecordComplication.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6611803E2A2D98328D042CA9 /* RecordComplication.swift */; };
 		6C2B0A927FEFE95F323931CF /* SharedConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A0075E4CFD286E9FE8E7D55 /* SharedConfig.swift */; };
 		6DC7C8D5DF8BCE1F550DB1DD /* StartRecordingControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 149D488601AE102967EB70A4 /* StartRecordingControl.swift */; };
 		6DD94C7D823555C9ED2E333E /* RecordingLaunchRequestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C64AF06641EFF4C8B85B775 /* RecordingLaunchRequestTests.swift */; };
@@ -159,7 +158,6 @@
 		5CE93DA78512CAEA42DBEE5B /* WristMemoWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WristMemoWatchApp.swift; sourceTree = "<group>"; };
 		60F2668A8F6DE033012342AC /* RecordingFlowUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecordingFlowUITests.swift; sourceTree = "<group>"; };
 		6249C2783F0DC1188AF10FD6 /* WristMemoControls.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WristMemoControls.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		6611803E2A2D98328D042CA9 /* RecordComplication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordComplication.swift; sourceTree = "<group>"; };
 		66CFE3375C0A0B14BB5DED5B /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/WatchOS.platform/Developer/SDKs/WatchOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		689CF9FA680CBDFB7F9D75AC /* StartRecordingIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartRecordingIntent.swift; sourceTree = "<group>"; };
 		6B2531C1BED13C6557ADAE32 /* DEVICE_TESTING.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = operations/DEVICE_TESTING.md; sourceTree = "<group>"; };
@@ -545,7 +543,6 @@
 			children = (
 				C7F424B12DE56E9CAD6F4DE5 /* ControlsBundle.swift */,
 				149D488601AE102967EB70A4 /* StartRecordingControl.swift */,
-				6611803E2A2D98328D042CA9 /* RecordComplication.swift */,
 			);
 			path = Widgets;
 			sourceTree = "<group>";
@@ -799,7 +796,6 @@
 			files = (
 				90AC0C21AE4BB7CC36E16120 /* ControlsBundle.swift in Sources */,
 				6DC7C8D5DF8BCE1F550DB1DD /* StartRecordingControl.swift in Sources */,
-				6AE6462E492BF876F118B903 /* RecordComplication.swift in Sources */,
 				6C2B0A927FEFE95F323931CF /* SharedConfig.swift in Sources */,
 				DA760E8063D8F46C1EE1984D /* RecordingLaunchRequest.swift in Sources */,
 				F5AA306BB4BDC8B76812D9D1 /* StartRecordingIntent.swift in Sources */,
@@ -920,7 +916,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/WatchApp-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = WristMemo;
@@ -928,7 +924,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.6;
+				MARKETING_VERSION = 1.7;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(WRISTMEMO_WATCH_BUNDLE_ID)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -946,7 +942,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Config/iOSApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/iOSApp-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = WristMemo;
@@ -956,7 +952,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.6;
+				MARKETING_VERSION = 1.7;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(WRISTMEMO_APP_BUNDLE_ID)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -1031,7 +1027,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/WatchApp-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = WristMemo;
@@ -1039,7 +1035,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.6;
+				MARKETING_VERSION = 1.7;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(WRISTMEMO_WATCH_BUNDLE_ID)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -1085,7 +1081,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/WatchControls-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "WristMemo Controls";
@@ -1094,7 +1090,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.6;
+				MARKETING_VERSION = 1.7;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(WRISTMEMO_CONTROLS_BUNDLE_ID)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -1109,7 +1105,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/WatchControls-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "WristMemo Controls";
@@ -1118,7 +1114,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.6;
+				MARKETING_VERSION = 1.7;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(WRISTMEMO_CONTROLS_BUNDLE_ID)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -1136,7 +1132,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Config/iOSApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/iOSApp-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = WristMemo;
@@ -1146,7 +1142,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.6;
+				MARKETING_VERSION = 1.7;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(WRISTMEMO_APP_BUNDLE_ID)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;

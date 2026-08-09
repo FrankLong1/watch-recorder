@@ -147,7 +147,7 @@ final class RecorderModel {
     /// Long enough to read a single word on a wrist that has just come up.
     private static let noticeDuration: Duration = .seconds(3)
     /// Give the finished-capture message enough time to register, without ever
-    /// making the next capture wait. A tap or Action-button press clears it sooner.
+    /// making the next capture wait. An Action Button press clears it sooner.
     private static let completionReceiptDuration: Duration = .milliseconds(2_500)
     /// A brief grace period makes lowering the wrist a deliberate stop without
     /// ending a memo when the user merely glances away.
@@ -286,14 +286,11 @@ final class RecorderModel {
 
     // MARK: - Transport
 
-    /// OFF is the only in-app start target. While recording, the same large
-    /// screen target is the deterministic stop fallback.
+    /// A screen tap is stop-only. OFF is status, never a second start route;
+    /// the Action Button owns that one-directional transition.
     func handleScreenTap() {
-        if canStopRecording {
-            stop()
-        } else if phase == .idle {
-            Task { await startRecording() }
-        }
+        guard canStopRecording else { return }
+        stop()
     }
 
     private func startFromActionButton() {

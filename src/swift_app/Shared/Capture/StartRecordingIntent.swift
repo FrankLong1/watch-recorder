@@ -32,9 +32,9 @@ struct StartRecordingIntent: OpenIntent {
     @Parameter(title: "Target")
     var target: CaptureLaunchTarget
 
-    /// Also surfaces the action in Shortcuts and Siri, the only comparable
-    /// route on watches without an Action button.
-    static let isDiscoverable = true
+    /// The intent exists to back the assigned Action Button Control, not to
+    /// create a parallel Siri or Shortcuts start route.
+    static let isDiscoverable = false
 
     init() {
         target = .recorder

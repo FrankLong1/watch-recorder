@@ -11,16 +11,18 @@ Draft, and **running**. Verified on the Apple Watch Ultra 3 simulator
 (watchOS 26.5): launches straight into recording, and crash recovery
 reconstructs a valid AAC memo from a hard-killed session.
 
-Not yet on real hardware — the Action button itself has no simulator
-equivalent, so press-to-record latency and control assignment still need an
-Ultra. Setup and the remaining checklist: [DEVICE_TESTING.md](docs/operations/DEVICE_TESTING.md).
+Not yet on real hardware. The watchOS 26.5 Ultra simulator's **Device › Action
+Button** command verifies assignment and launch behaviour, but press-to-record
+latency and physical feedback still need an Ultra. Setup and the remaining
+checklist: [DEVICE_TESTING.md](docs/operations/DEVICE_TESTING.md).
 
 ## The interface
 
-One button, the size of the screen. **Grey OFF starts; red RECORDING stops.**
-The Action Button is launch-or-start: it starts from idle and does nothing while
-a memo is starting, recording, or paused. While recording, a screen tap, Double
-Tap, lowering the wrist for 8 seconds, or exiting WristMemo stops and saves.
+One stop target, the size of the screen. **Grey OFF says PRESS ACTION BUTTON;
+red RECORDING says TAP TO STOP.** The Action Button is the only start route: it
+starts from idle and does nothing while a memo is starting, recording, or
+paused. While recording, a screen tap, Double Tap, lowering the wrist for 8
+seconds, or exiting WristMemo stops and saves.
 There is no timer, meter, cancel, confirmation, list or settings screen. Red
 means audio is genuinely reaching the disk, never merely that a press was
 received.
@@ -28,15 +30,15 @@ received.
 ## What happens on a press
 
 1. Action button → the assigned control fires `StartRecordingIntent`.
-2. The intent's `supportedModes = .foreground(.immediate)` brings the watch app
-   forward at once.
+2. The control runs an `OpenIntent`, the foreground-launch contract required to
+   bring the watch app forward reliably.
 3. The screen stays grey until the recorder is actually writing; then it turns
    red and emits the one **START** haptic. That means “speak now.”
 4. Double Tap, a screen tap, an 8-second wrist-down timeout, or exiting the app
    stops it. At that same STOP haptic, the screen briefly turns green with
    **MESSAGE RECEIVED / Launching background agent…**; it is a local-capture
    receipt, not a claim that a network hop has completed. The recorder is
-   already idle beneath it, so a new press starts immediately. Compression,
+   already idle beneath it, so a new Action Button press starts immediately. Compression,
    phone transfer, transcription and downstream work all remain behind it.
 5. Each device deletes its copy of the audio 24 h after the next hop has taken
    it, and never before. See [Design](docs/product/DESIGN.md#Memos-delete-themselves).
@@ -66,9 +68,11 @@ The app must have been launched at least once so the control is registered, and
 the microphone permission prompt has to be answered once before a press can
 record without interaction.
 
-It also appears in **Control Center** (side button) and can be added to the
-**Smart Stack**. On non-Ultra watches, use the Siri phrase "Control your agents
-in WristMemo" or add the Shortcuts action.
+Because Apple uses a WidgetKit Control for third-party Action Button actions,
+the same Control also remains visible in the system Control gallery. watchOS
+does not expose the invocation source, so the app cannot reject that system
+surface; WristMemo publishes no separate complication, Siri, or Shortcuts start
+action.
 
 ## Building
 

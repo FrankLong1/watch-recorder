@@ -9,6 +9,5 @@ import WidgetKit
 struct WristMemoControlsBundle: WidgetBundle {
     var body: some Widget {
         StartRecordingControl()
-        RecordComplication()
     }
 }
