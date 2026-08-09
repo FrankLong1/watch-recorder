@@ -1,5 +1,19 @@
 import AppIntents
 
+/// The single in-app destination exposed by the capture control.
+///
+/// `OpenIntent` requires a target value. Keeping the value static preserves the
+/// one-gesture capture contract: there is nothing for the wearer to configure
+/// or choose before recording.
+enum CaptureLaunchTarget: String, AppEnum {
+    case recorder
+
+    static let typeDisplayRepresentation = TypeDisplayRepresentation("WristMemo destination")
+    static let caseDisplayRepresentations: [CaptureLaunchTarget: DisplayRepresentation] = [
+        .recorder: DisplayRepresentation(title: "Recorder")
+    ]
+}
+
 /// The intent behind the control the user assigns to the Action button.
 ///
 /// It deliberately does no recording work itself. watchOS only lets a
@@ -7,7 +21,7 @@ import AppIntents
 /// the app forward and leave a marker saying "start immediately". The recording
 /// is then owned by the app, where the audio session, the UI and the
 /// interruption handlers all live.
-struct StartRecordingIntent: AppIntent {
+struct StartRecordingIntent: OpenIntent {
 
     static let title: LocalizedStringResource = "Control Your Agents"
 
@@ -15,18 +29,20 @@ struct StartRecordingIntent: AppIntent {
         "Opens WristMemo and immediately records an instruction for your persistent agents."
     )
 
-    /// watchOS 26 replacement for the deprecated `openAppWhenRun`.
-    ///
-    /// `.foreground(.immediate)` brings the app forward as soon as the button is
-    /// pressed rather than waiting for `perform()` to return, which is what
-    /// makes an Action button press feel like a hardware record button.
-    /// `.deferred` would show the control's own animation first and foreground
-    /// the app afterwards — noticeably slower here.
-    static let supportedModes: IntentModes = .foreground(.immediate)
+    @Parameter(title: "Target")
+    var target: CaptureLaunchTarget
 
     /// Also surfaces the action in Shortcuts and Siri, the only comparable
     /// route on watches without an Action button.
     static let isDiscoverable = true
+
+    init() {
+        target = .recorder
+    }
+
+    init(target: CaptureLaunchTarget) {
+        self.target = target
+    }
 
     func perform() async throws -> some IntentResult {
         RecordingLaunchRequest.post()

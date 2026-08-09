@@ -1,5 +1,8 @@
 import Foundation
+import AppIntents
 import Testing
+
+private func requireOpenIntent<Intent: OpenIntent>(_: Intent.Type) {}
 
 /// Serialized on purpose: the latch is process-global static state, and Swift
 /// Testing runs tests in parallel by default. Without `.serialized` these would
@@ -25,6 +28,22 @@ struct RecordingLaunchRequestTests {
         defer { clearDebugSwitch() }
 
         #expect(RecordingLaunchRequest.consume() == false)
+    }
+
+    @Test("capture control is an OpenIntent and posts its launch request")
+    func intentOpensAppAndRequestsCapture() async throws {
+        clearDebugSwitch()
+        defer { clearDebugSwitch() }
+
+        // This generic constraint is deliberate: a generic foreground
+        // AppIntent compiles and passes the latch tests, but watchOS can't use
+        // it as a Control that launches the watch app.
+        requireOpenIntent(StartRecordingIntent.self)
+
+        let intent = StartRecordingIntent()
+        #expect(intent.target == .recorder)
+        _ = try await intent.perform()
+        #expect(RecordingLaunchRequest.consume() == true)
     }
 
     @Test("post makes exactly one consume succeed")

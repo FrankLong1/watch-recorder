@@ -138,8 +138,12 @@ mkdir -p "$(dirname "$DD")"
 # build-for-testing so --repeat and both test bundles reuse a single build.
 # Shared with watch mode, which rebuilds on every save.
 build_once() {
+    # Keep normal simulator code signing enabled. WidgetKit/App Intents needs a
+    # signed Control extension to serialize and execute the Action Button
+    # action; disabling signing makes the exact system boundary report a false
+    # "control failed" error even though ordinary app UI tests still pass.
     xcodebuild build-for-testing -project src/swift_app/WristMemo.xcodeproj -scheme "$SCHEME" \
-        -destination "id=$SIM" -derivedDataPath "$DD" CODE_SIGNING_ALLOWED=NO > "$DD.log" 2>&1
+        -destination "id=$SIM" -derivedDataPath "$DD" > "$DD.log" 2>&1
 }
 build_errors() { grep -E "error:" "$DD.log" | head -20; }
 
@@ -369,7 +373,7 @@ run_tests_bundle() {  # $1 = target name, $2 = label
     bold "$2"
     local out="$DD-$1.log"
     if xcodebuild test-without-building -project src/swift_app/WristMemo.xcodeproj -scheme "$SCHEME" \
-        -destination "id=$SIM" -derivedDataPath "$DD" CODE_SIGNING_ALLOWED=NO \
+        -destination "id=$SIM" -derivedDataPath "$DD" \
         -only-testing:"$1" > "$out" 2>&1; then
         grep -E "Test run with .* passed|with [0-9]+ test" "$out" | tail -1 | sed 's/^/  /' || true
         # A bundle that crashes on launch can still exit 0 having run nothing.
