@@ -222,15 +222,16 @@ sleep 5
   test("deduplicates a commit that appears arbitrarily far behind the high-water cursor", () => {
     const current = state();
     const later = { id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", transcribedAt: "2026-08-08T10:05:00.000Z", transcript: "later" };
-    discoverMemos(current, [later], "2026-08-08T10:05:01.000Z");
+    expect(discoverMemos(current, [later], "2026-08-08T10:05:01.000Z")).toBe(true);
     current.memos[later.id].status = "succeeded";
 
     const delayed = { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", transcribedAt: "2026-08-07T10:04:00.000Z", transcript: "delayed commit" };
-    discoverMemos(current, [delayed, later], "2026-08-08T10:06:00.000Z");
+    expect(discoverMemos(current, [delayed, later], "2026-08-08T10:06:00.000Z")).toBe(true);
     expect(Object.keys(current.memos)).toHaveLength(2);
     expect(current.memos[delayed.id].status).toBe("pending");
     expect(current.memos[later.id].status).toBe("succeeded");
     expect(current.cursor).toEqual({ id: later.id, transcribedAt: later.transcribedAt });
+    expect(discoverMemos(current, [delayed, later], "2026-08-08T10:07:00.000Z")).toBe(false);
   });
 
   test("paginates the complete owner feed from the beginning", async () => {

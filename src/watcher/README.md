@@ -1,6 +1,6 @@
 # WristMemo transcript-to-Codex watcher
 
-Version `1.0.1` is the production polling architecture. Every new, non-empty
+Version `1.0.2` is the production polling architecture. Every new, non-empty
 memo for one explicitly configured owner creates one visible Codex task in one
 explicitly configured project folder. The transcript is the task input.
 
@@ -60,7 +60,9 @@ poll paginates the complete owner-scoped feed from the beginning and deduplicate
 by watch-generated UUID. This unbounded scan closes the commit-order hole even
 when a transaction remains open for an arbitrarily long time. Each page is
 discovered, persisted, and processed before it is released, so transcript
-history is never accumulated in watcher memory. An old
+history is never accumulated in watcher memory. Unchanged historical pages do
+not rewrite or rescan the full ledger; one fallback ledger scan runs after the
+complete feed pass for repairable records missing from the current feed. An old
 pending retry fetches its transcript by UUID, so transcript text does not need
 to be retained locally.
 
@@ -140,7 +142,7 @@ The external image definition that must consume it is:
 frank-vm-sandbox/container-images/demo-workstation-image/profiles/frank/
 ```
 
-That repository's Frank-only profile vendors `wristmemo-watcher-1.0.1.tar.gz`
+That repository's Frank-only profile vendors `wristmemo-watcher-1.0.2.tar.gz`
 plus its SHA-256 receipt. Its Dockerfile verifies both the receipt and pinned
 digest before extraction, runs `image/install-image-layer.sh`, and then runs
 the profile smoke test. The profile manifest and image-contract tests keep the

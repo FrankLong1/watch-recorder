@@ -225,7 +225,7 @@ this replaces the earlier live wiring proof.
 | Cloud Workstation is stopped | Transcripts remain in Postgres and are discovered after the workstation runs again; availability remains bounded by workstation lifecycle | 🟡 |
 | Feed fails or hangs | The request aborts after 10 seconds; durable health records a generic failure and backs off from 20 seconds to ten minutes. Status becomes stale after four missed normal polls | 🔵 |
 | A transaction commits arbitrarily far behind the high-water cursor | Every poll paginates the complete owner-scoped feed from the beginning and deduplicates by durable memo UUID; focused tests cover an earlier timestamp arriving more than a day after a later row | 🟡 |
-| More rows exist than one feed page | The watcher paginates the complete feed and persists/processes one page at a time instead of accumulating transcript history in memory | 🟡 |
+| More rows exist than one feed page | The watcher paginates the complete feed, processes only each page's UUID records, skips ledger writes for unchanged pages, and performs one fallback ledger scan after the pass | 🟡 |
 | Old pending memo needs another attempt | The transcript is re-fetched by UUID through the same one-owner authorization query; it is not retained in watcher state | 🟡 |
 | One memo fails permanently before task creation | Five bounded attempts lead to terminal `failed`; the attention list stays red and later memos continue | 🔵 |
 | App-server fails before `thread/start` is sent | The memo remains retryable until the bounded terminal threshold; no task may exist yet | 🟡 |

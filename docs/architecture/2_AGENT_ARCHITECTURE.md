@@ -62,7 +62,9 @@ beginning and deduplicates against the durable UUID ledger. A transaction that
 commits arbitrarily long after its timestamp was assigned is therefore found on
 the next poll; already submitted UUIDs are not re-created. The watcher persists
 and processes one page before fetching the next, keeping memory bounded even as
-history grows. Pending items
+history grows. Page processing touches only that page's UUID records, unchanged
+historical pages do not rewrite the ledger, and one fallback ledger scan after
+the feed pass handles missing repair records. Pending items
 re-fetch their transcript by UUID, so the watcher does not retain transcript
 text merely to retry.
 
@@ -149,7 +151,7 @@ the pin is updated.
 
 ## Image/runtime ownership
 
-This repository owns a versioned `1.0.1` payload and image-layer installer:
+This repository owns a versioned `1.0.2` payload and image-layer installer:
 
 ```text
 src/watcher/VERSION

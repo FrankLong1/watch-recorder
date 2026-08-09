@@ -9,7 +9,7 @@ import { chmod, lstat, mkdir, open, readFile, realpath, rename, stat, writeFile 
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import readline from "node:readline";
 
-export const WATCHER_VERSION = "1.0.1";
+export const WATCHER_VERSION = "1.0.2";
 const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
 const FIRST_CURSOR: MemoCursor = {
   id: ZERO_UUID,
@@ -624,17 +624,23 @@ function compareCursor(left: MemoCursor, right: MemoCursor): number {
   return time === 0 ? left.id.localeCompare(right.id) : time;
 }
 
-export function discoverMemos(state: WatcherState, memos: WatcherMemo[], now = timestamp()): void {
+export function discoverMemos(state: WatcherState, memos: WatcherMemo[], now = timestamp()): boolean {
+  let changed = false;
   for (const memo of memos) {
-    state.memos[memo.id] ??= {
-      status: "pending",
-      discoveredAt: now,
-      transcribedAt: memo.transcribedAt,
-    };
+    if (!state.memos[memo.id]) {
+      state.memos[memo.id] = {
+        status: "pending",
+        discoveredAt: now,
+        transcribedAt: memo.transcribedAt,
+      };
+      changed = true;
+    }
     if (!state.cursor || compareCursor(memo, state.cursor) > 0) {
       state.cursor = { id: memo.id, transcribedAt: memo.transcribedAt };
+      changed = true;
     }
   }
+  return changed;
 }
 
 async function processMemo(
@@ -769,8 +775,7 @@ async function pollMemos(
   await writeState(statePath, state);
   try {
     await scanMemoPages(config, async (page) => {
-      discoverMemos(state, page);
-      await writeState(statePath, state);
+      if (discoverMemos(state, page)) await writeState(statePath, state);
       await onPage(page);
     });
     state.poll = {
@@ -860,6 +865,25 @@ export async function processDue(
     }
     await processMemo(config, statePath, state, memo, client);
     if (client.isReady?.() === false) break;
+  }
+}
+
+async function processPageDue(
+  config: Config,
+  statePath: string,
+  state: WatcherState,
+  current: WatcherMemo[],
+  client: TaskClient,
+): Promise<void> {
+  const due = current
+    .filter((memo) => {
+      const record = state.memos[memo.id];
+      return record && !isTerminal(record.status) && attemptIsDue(record);
+    })
+    .sort((left, right) => state.memos[left.id].discoveredAt.localeCompare(state.memos[right.id].discoveredAt));
+  for (const memo of due) {
+    if (client.isReady?.() === false) break;
+    await processMemo(config, statePath, state, memo, client);
   }
 }
 
@@ -988,8 +1012,9 @@ async function watch(config: Config, statePath: string, once: boolean): Promise<
       }
       try {
         await pollMemos(config, statePath, state, async (page) => {
-          if (client) await processDue(config, statePath, state, page, client);
+          if (client) await processPageDue(config, statePath, state, page, client);
         });
+        if (client) await processDue(config, statePath, state, [], client);
       } catch {
         console.error(JSON.stringify({
           message: "watcher feed poll failed",
