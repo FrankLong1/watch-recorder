@@ -19,6 +19,7 @@ DerivedData/
 xcuserdata/
 *.xcworkspace/xcuserdata/
 src/swift_app/Config/Signing.local.xcconfig
+src/swift_app/Config/TestFlight.local.env
 .DS_Store
 
 # Machine-specific operational notes.

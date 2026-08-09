@@ -138,6 +138,13 @@ for the one-time Watch steps and hardware checklist. `scripts/run.sh --watch`
 is only the optional faster path when the direct Watch tunnel is healthy.
 `scripts/sim.sh` is the simulator counterpart.
 
+## Releasing to TestFlight
+
+Follow the [TestFlight release runbook](docs/operations/TESTFLIGHT_RELEASE.md).
+It includes the API-key automation path, the Xcode/App Store Connect fallback,
+and the final Internal-group verification that makes a processed build visible
+to testers.
+
 ## Layout
 
 ```
