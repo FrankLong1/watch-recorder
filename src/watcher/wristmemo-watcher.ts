@@ -9,7 +9,7 @@ import { chmod, lstat, mkdir, open, readFile, realpath, rename, stat, writeFile 
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import readline from "node:readline";
 
-export const WATCHER_VERSION = "1.0.5";
+export const WATCHER_VERSION = "1.0.7";
 const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
 const FIRST_CURSOR: MemoCursor = {
   id: ZERO_UUID,
@@ -302,6 +302,17 @@ export function appServerArgs(): string[] {
   return ["app-server", "--stdio", "-c", "mcp_servers={}"];
 }
 
+export function appServerClientInfo(): { name: string; title: string; version: string } {
+  return {
+    // Codex Desktop currently discovers remote-project sidebar threads only
+    // from this persisted client originator. Keep the human-facing integration
+    // identity in title and in every task name.
+    name: "Codex Desktop",
+    title: "WristMemo Watcher",
+    version: WATCHER_VERSION,
+  };
+}
+
 export function taskPrompt(transcript: string): string {
   return [
     "A WristMemo voice memo created this task automatically.",
@@ -398,11 +409,7 @@ export class AppServerClient {
     this.child.once("close", () => this.failAll(new AppServerFailure("process exit")));
 
     const initialized = await this.request("initialize", {
-      clientInfo: {
-        name: "wristmemo_watcher",
-        title: "WristMemo Watcher",
-        version: WATCHER_VERSION,
-      },
+      clientInfo: appServerClientInfo(),
       capabilities: { optOutNotificationMethods: ["item/agentMessage/delta"] },
     });
     this.send({ method: "initialized", params: {} });

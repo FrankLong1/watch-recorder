@@ -6,6 +6,7 @@ import {
   AppServerClient,
   WATCHER_VERSION,
   appServerArgs,
+  appServerClientInfo,
   codexChildEnvironment,
   discoverMemos,
   googleIdentityToken,
@@ -36,6 +37,11 @@ describe("production Codex desktop watcher", () => {
   test("creates a read-only, network-disabled task with real transcript semantics", () => {
     const transcript = "Please propose a safer reconciliation design.";
     expect(appServerArgs()).toEqual(["app-server", "--stdio", "-c", "mcp_servers={}"]);
+    expect(appServerClientInfo()).toEqual({
+      name: "Codex Desktop",
+      title: "WristMemo Watcher",
+      version: WATCHER_VERSION,
+    });
     expect(threadStartRequest({ taskCwd: "/workspace/projects/watch-recorder" }, 3)).toEqual({
       method: "thread/start",
       id: 3,

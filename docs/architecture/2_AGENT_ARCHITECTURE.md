@@ -146,6 +146,10 @@ experimental compatibility dependency.
 The watcher supplies `threadSource: "user"` on `thread/start`. In the verified
 desktop integration this is the persisted classification used, together with
 the exact `cwd`, to group the thread under the corresponding saved project.
+The current desktop sidebar additionally filters on the persisted originator,
+which App Server derives from `initialize.clientInfo.name`; the watcher uses
+the desktop compatibility name there while preserving its identity in the
+client title, service metrics tag, and visible `WristMemo:` task title.
 
 Health starts the image-provided Codex server, records its returned user agent,
 and exercises `thread/list` against the exact project. A version change is
@@ -155,7 +159,7 @@ post-rollout acceptance check because cross-process discovery is experimental.
 
 ## Image/runtime ownership
 
-This repository owns a versioned `1.0.5` payload and image-layer installer:
+This repository owns a versioned `1.0.7` payload and image-layer installer:
 
 ```text
 src/watcher/VERSION

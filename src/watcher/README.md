@@ -1,6 +1,6 @@
 # WristMemo transcript-to-Codex watcher
 
-Version `1.0.5` is the production polling architecture. Every new, non-empty
+Version `1.0.7` is the production polling architecture. Every new, non-empty
 memo for one explicitly configured owner creates one visible Codex task in one
 explicitly configured project folder. The transcript is the task input.
 
@@ -104,7 +104,11 @@ last step remains a manually verified compatibility dependency.
 Every new watcher thread sets the supported `threadSource` metadata to `user`.
 Codex Desktop uses that classification together with the exact `cwd` to group
 the task under the matching saved remote project instead of leaving it only in
-the underlying Codex session store.
+the underlying Codex session store. The current desktop build also filters the
+remote project sidebar by the persisted `Codex Desktop` originator. App Server
+derives that value from `initialize.clientInfo.name`, so the watcher uses that
+compatibility name while retaining `WristMemo Watcher` as the client title,
+`wristmemo_watcher` as the service metrics tag, and `WristMemo:` task titles.
 
 Startup initializes the image-provided Codex app-server, records its returned
 user agent, and exercises `thread/list`. Codex upgrades are accepted when those
@@ -145,7 +149,7 @@ The external image definition that must consume it is:
 frank-vm-sandbox/container-images/demo-workstation-image/profiles/frank/
 ```
 
-That repository's Frank-only profile vendors `wristmemo-watcher-1.0.5.tar.gz`
+That repository's Frank-only profile vendors `wristmemo-watcher-1.0.7.tar.gz`
 plus its SHA-256 receipt. Its Dockerfile verifies both the receipt and pinned
 digest before extraction, runs `image/install-image-layer.sh`, and then runs
 the profile smoke test. The profile manifest and image-contract tests keep the
