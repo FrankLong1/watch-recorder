@@ -1,0 +1,147 @@
+import SwiftUI
+
+/// The entire app.
+///
+/// The Action Button is the only start surface. Grey OFF is status and
+/// instruction; red RECORDING turns the full screen into a deterministic stop.
+/// Double Tap is enabled only while it stops. No timer, no meter, no
+/// cancel, no list, no settings, no navigation: everything a memo needs after
+/// it is spoken — compress, sync, upload, delete itself — happens without the
+/// user, so there is nothing to show and nothing to decide.
+///
+/// **The colour is a promise, not a mood.** Red is driven by `isRecording`,
+/// which the model only enters once `AVAudioRecorder` is genuinely writing. A
+/// press whose audio session has not activated yet stays grey, and the haptic
+/// that means "speak" fires on the same transition. If red could ever run ahead
+/// of the recorder, the one thing this interface says would be a lie.
+struct RecordScreen: View {
+
+    @Environment(RecorderModel.self) private var model
+
+    // Not `.red`: a full screen of it at 100% is a klaxon on a wrist at night,
+    // and the difference from grey is what carries the meaning, not the
+    // saturation. Grey is lifted off pure black so an unlit screen and a ready
+    // one are not the same thing.
+    private static let recordingColour = Color(red: 0.72, green: 0.06, blue: 0.11)
+    private static let readyColour = Color(white: 0.09)
+    private static let completionColour = Color(red: 0.08, green: 0.48, blue: 0.22)
+
+    var body: some View {
+        Button(action: model.handleScreenTap) {
+            Group {
+                if let receipt = model.completionReceipt {
+                    VStack(spacing: 5) {
+                        Text(receipt.title)
+                            .font(.custom("Helvetica-Bold", size: 19, relativeTo: .headline))
+                        Text(receipt.detail)
+                            .font(.custom("Helvetica", size: 11, relativeTo: .caption2))
+                            .opacity(0.8)
+                    }
+                } else if (model.phase == .idle || model.phase == .starting),
+                          model.permission != .denied,
+                          model.notice == nil {
+                    VStack(spacing: 7) {
+                        Text(AccessibilityID.StatusText.off)
+                            .font(
+                                .custom("Helvetica", size: 33, relativeTo: .largeTitle)
+                                    .weight(.medium)
+                            )
+                            .tracking(5.8)
+                            // SwiftUI includes tracking after the last letter;
+                            // offset half of it to keep the word optically centred.
+                            .padding(.leading, 5.8)
+                            .foregroundStyle(Color(white: 0.88))
+
+                        Rectangle()
+                            .fill(Color.white.opacity(0.25))
+                            .frame(width: 96, height: 1)
+
+                        Text(AccessibilityID.StatusText.pressActionButton)
+                            .font(.custom("Helvetica", size: 9, relativeTo: .caption2))
+                            .tracking(0.8)
+                            .textCase(.uppercase)
+                            .foregroundStyle(Color(white: 0.54))
+                    }
+                } else if model.phase == .recording {
+                    VStack(spacing: 7) {
+                        Text(AccessibilityID.StatusText.recording)
+                            .font(
+                                .custom("Helvetica", size: 17, relativeTo: .headline)
+                                    .weight(.medium)
+                            )
+                            .tracking(2.4)
+                            .padding(.leading, 2.4)
+
+                        Rectangle()
+                            .fill(Color.white.opacity(0.34))
+                            .frame(width: 96, height: 1)
+
+                        Text(AccessibilityID.StatusText.tapToStop)
+                            .font(.custom("Helvetica", size: 9, relativeTo: .caption2))
+                            .tracking(0.8)
+                            .textCase(.uppercase)
+                            .foregroundStyle(Color.white.opacity(0.72))
+                    }
+                } else {
+                    // Pauses, permission failures, and notices stay visually
+                    // distinct from the normal two-state capture surface.
+                    Text(status)
+                        .font(.custom("Helvetica-Bold", size: 21, relativeTo: .title3))
+                }
+            }
+            .foregroundStyle(foregroundColour)
+            .multilineTextAlignment(.center)
+            .minimumScaleFactor(0.6)
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(backgroundColour)
+        }
+        .buttonStyle(.plain)
+        .ignoresSafeArea()
+        .animation(.easeOut(duration: 0.12), value: model.isRecording)
+        .animation(.easeOut(duration: 0.12), value: model.completionReceipt)
+        // Double Tap is a stop-only gesture. Disabling it while OFF prevents
+        // an incidental hand gesture from becoming a second start route.
+        .handGestureShortcut(.primaryAction, isEnabled: model.canStopRecording)
+        .accessibilityIdentifier(AccessibilityID.recordButton)
+        .accessibilityLabel("WristMemo")
+        // The word on screen, exposed as the button's value rather than a
+        // separate element: SwiftUI folds a button's label into one
+        // accessibility node, so a `Text` inside it is not separately queryable.
+        .accessibilityValue(accessibilityStatus)
+        .accessibilityHint(
+            model.canStopRecording
+                ? "Double-tap to stop and save the memo"
+                : "Press the Action Button to start recording"
+        )
+    }
+
+    private var status: String {
+        if model.permission == .denied { return AccessibilityID.StatusText.micOff }
+        if let notice = model.notice { return notice }
+        return switch model.phase {
+        case .recording: AccessibilityID.StatusText.recording
+        // Paused is the interruption case — a call took the microphone. It is
+        // not red, because nothing is being written, and saying OFF would
+        // invite a tap that starts a second memo on top of a live one.
+        case .paused: AccessibilityID.StatusText.paused
+        case .idle, .starting: AccessibilityID.StatusText.idle
+        }
+    }
+
+    private var accessibilityStatus: String {
+        if let receipt = model.completionReceipt {
+            return "\(receipt.title)\n\(receipt.detail)"
+        }
+        return model.phase == .recording ? AccessibilityID.StatusText.recordingControl : status
+    }
+
+    private var backgroundColour: Color {
+        if model.completionReceipt != nil { return Self.completionColour }
+        return model.isRecording ? Self.recordingColour : Self.readyColour
+    }
+
+    private var foregroundColour: Color {
+        model.completionReceipt != nil || model.isRecording ? .white : Color(white: 0.62)
+    }
+}

@@ -1,0 +1,9 @@
+// Copy to Signing.local.xcconfig and fill in values for your Apple account.
+// Signing.local.xcconfig is gitignored.
+
+DEVELOPMENT_TEAM =
+WRISTMEMO_BUNDLE_PREFIX = com.example.wristmemo
+WRISTMEMO_INGEST_URL = https:/$()/your-service.example
+WRISTMEMO_GOOGLE_IOS_CLIENT_ID = your-ios-client.apps.googleusercontent.com
+WRISTMEMO_GOOGLE_SERVER_CLIENT_ID = your-server-client.apps.googleusercontent.com
+WRISTMEMO_GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.your-ios-client

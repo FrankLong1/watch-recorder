@@ -1,0 +1,192 @@
+/// WristMemo ingest.
+///
+/// One endpoint. The phone POSTs a finished memo's audio; this streams it to
+/// OpenAI, stores the transcript, and answers with a status code and nothing
+/// else. Audio is never written to disk, a bucket, or a log — see
+/// docs/architecture/1_INGEST_ARCHITECTURE.md.
+
+import { Hono } from "hono";
+import { loadConfig } from "./config";
+import { createMemoStore, DatabaseUnavailableError, MemoInProgressError } from "./db";
+import {
+  databaseUserId,
+  GoogleIdentityVerifier,
+  isAllowedService,
+  isAllowedUser,
+} from "./google-identity";
+import { parseRoute } from "./routing";
+import { hasTranscriptWords, transcribe, TranscriptionError, transcriptionFailureStatus } from "./transcribe";
+import { registerTranscriptFeed } from "./transcript-feed";
+import { isSupportedMemoUpload } from "./upload-format";
+import { registerWatcherFeed } from "./watcher-feed";
+
+const config = loadConfig();
+const store = createMemoStore(config.database);
+const identities = new GoogleIdentityVerifier();
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function log(message: string, fields: Record<string, string | number> = {}) {
+  // Structured, and deliberately incapable of carrying audio or transcript text.
+  console.log(JSON.stringify({ message, ...fields }));
+}
+
+const app = new Hono();
+
+app.get("/readyz", async (c) => {
+  try {
+    await store.ping();
+    return c.text("ok");
+  } catch {
+    return c.text("database unavailable", 503);
+  }
+});
+
+// The watcher is a distinct trusted transcript-retention surface. Its service
+// identity is allowlisted and its database query is pinned to one configured
+// memo owner; audio never crosses this boundary.
+registerWatcherFeed(app, {
+  store,
+  log,
+  authorize: async (authorization) => {
+    const principal = await identities.verifyAuthorization(authorization, config.googleOAuthClientId);
+    if (!principal) return "unauthorized";
+    return isAllowedService(principal, config.googleWatcherServiceAccounts)
+      ? { userId: `google:${config.googleWatcherOwnerSubject}` }
+      : "forbidden";
+  },
+});
+
+// Unlike the watcher feed, this is the person's own review surface. It is
+// authenticated with the same short-lived Google ID token used for upload and
+// always filters the query by that user's immutable subject-derived identity.
+registerTranscriptFeed(app, {
+  store,
+  log,
+  authorize: async (authorization) => {
+    const principal = await identities.verifyAuthorization(authorization, config.googleOAuthClientId);
+    if (!principal) return "unauthorized";
+    if (!isAllowedUser(principal, config.googleAllowedUserSubjects)) return "forbidden";
+    return { userId: databaseUserId(principal) };
+  },
+});
+
+app.post("/v1/memos/:id", async (c) => {
+  const principal = await identities.verifyAuthorization(
+    c.req.header("authorization"),
+    config.googleOAuthClientId,
+  );
+  if (!principal) return c.json({ error: "unauthorized" }, 401);
+  if (!isAllowedUser(principal, config.googleAllowedUserSubjects)) {
+    return c.json({ error: "forbidden" }, 403);
+  }
+
+  const id = c.req.param("id");
+  if (!UUID.test(id)) {
+    return c.json({ error: "id must be a uuid" }, 400);
+  }
+
+  const recordedAtSeconds = Number(c.req.header("x-recorded-at"));
+  const durationSeconds = Number(c.req.header("x-duration"));
+  if (!Number.isFinite(recordedAtSeconds) || recordedAtSeconds <= 0) {
+    return c.json({ error: "x-recorded-at must be unix seconds" }, 400);
+  }
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+    return c.json({ error: "x-duration must be seconds" }, 400);
+  }
+
+  if (!isSupportedMemoUpload(c.req.header("content-type"), c.req.header("x-audio-format"))) {
+    return c.json({ error: "only m4a audio is accepted" }, 415);
+  }
+
+  // The multipart envelope sent upstream needs a length, and a background
+  // URLSession uploading from a file always supplies one.
+  const declaredLength = Number(c.req.header("content-length"));
+  if (!Number.isSafeInteger(declaredLength) || declaredLength <= 0) {
+    return c.json({ error: "content-length is required" }, 411);
+  }
+  if (declaredLength > config.maxAudioBytes) {
+    return c.json({ error: "audio too large" }, 413);
+  }
+
+  const audio = c.req.raw.body;
+  if (!audio) {
+    return c.json({ error: "body is required" }, 400);
+  }
+
+  try {
+    return await store.withMemoLock(id, async () => {
+      // The lock covers the existence check and OpenAI call, not just the
+      // write. A retry whose first response was lost therefore cannot be
+      // transcribed or billed twice.
+      if (await store.isTranscribed(id)) {
+        await audio.cancel();
+        log("already transcribed", { id });
+        return c.body(null, 204);
+      }
+
+      const result = await transcribe({
+        audio,
+        audioLength: declaredLength,
+        apiKey: config.openaiApiKey,
+        baseUrl: config.openaiBaseUrl,
+        model: config.openaiModel,
+        signal: AbortSignal.timeout(4 * 60 * 1000),
+      });
+
+      // A blank response is a completed no-content outcome, not a memo for the
+      // phone library or watcher. Store the empty marker durably so a lost 204
+      // cannot cause a retry to bill the same accidental recording again.
+      const transcript = hasTranscriptWords(result.text) ? result.text : "";
+      const { route, body } = parseRoute(transcript);
+
+      await store.save({
+        id,
+        userId: databaseUserId(principal),
+        recordedAt: new Date(recordedAtSeconds * 1000),
+        durationSeconds,
+        transcript,
+        body,
+        route,
+        model: result.model,
+      });
+
+      log(transcript.length === 0 ? "empty transcription filtered" : "transcribed", {
+        id,
+        durationSeconds: Math.round(durationSeconds),
+        bytes: declaredLength,
+        characters: transcript.length,
+        route: route ?? "none",
+      });
+      return c.body(null, 204);
+    });
+  } catch (error) {
+    if (error instanceof MemoInProgressError) {
+      await audio.cancel();
+      return c.json({ error: "memo is already being transcribed" }, 503, {
+        "Retry-After": "30",
+      });
+    }
+    if (error instanceof DatabaseUnavailableError) {
+      log("database unavailable", { id });
+      return c.json({ error: "database unavailable" }, 503);
+    }
+    if (error instanceof TranscriptionError) {
+      log("transcription failed", { id, retryable: error.retryable ? 1 : 0 });
+      // A permanent upstream 4xx is a terminal client-visible failure. Returning
+      // 5xx here would make the phone resend the same audio forever.
+      return c.json({ error: "transcription failed" }, transcriptionFailureStatus(error));
+    }
+    log("unhandled error", { id, detail: error instanceof Error ? error.name : "unknown" });
+    return c.json({ error: "internal error" }, 500);
+  }
+});
+
+log("listening", { port: config.port, model: config.openaiModel });
+
+export default {
+  port: config.port,
+  fetch: app.fetch,
+  // Uploads are streamed, so this only has to admit the largest single memo.
+  maxRequestBodySize: config.maxAudioBytes + 1024 * 1024,
+};

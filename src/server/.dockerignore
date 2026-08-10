@@ -1,0 +1,8 @@
+node_modules
+dist
+terraform
+scripts
+migrations
+*.md
+.env
+.env.*

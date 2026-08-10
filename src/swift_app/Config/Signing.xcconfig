@@ -1,0 +1,23 @@
+// Public, non-identifying defaults. Never put an Apple team ID or a personal
+// reverse-domain prefix in this tracked file.
+//
+// Local signed builds can override these values in Signing.local.xcconfig,
+// which is optional and gitignored.
+
+DEVELOPMENT_TEAM =
+WRISTMEMO_BUNDLE_PREFIX = com.example.wristmemo
+
+WRISTMEMO_APP_BUNDLE_ID = $(WRISTMEMO_BUNDLE_PREFIX)
+WRISTMEMO_WATCH_BUNDLE_ID = $(WRISTMEMO_BUNDLE_PREFIX).watchkitapp
+WRISTMEMO_CONTROLS_BUNDLE_ID = $(WRISTMEMO_BUNDLE_PREFIX).watchkitapp.controls
+WRISTMEMO_TESTS_BUNDLE_ID = $(WRISTMEMO_BUNDLE_PREFIX).tests
+WRISTMEMO_UI_TESTS_BUNDLE_ID = $(WRISTMEMO_BUNDLE_PREFIX).uitests
+
+// Public OAuth client IDs and the endpoint are supplied by the ignored local
+// file for signed builds. Empty values keep public simulator builds inert.
+WRISTMEMO_INGEST_URL =
+WRISTMEMO_GOOGLE_IOS_CLIENT_ID =
+WRISTMEMO_GOOGLE_SERVER_CLIENT_ID =
+WRISTMEMO_GOOGLE_REVERSED_CLIENT_ID =
+
+#include? "Signing.local.xcconfig"

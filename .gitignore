@@ -1,0 +1,36 @@
+# Secrets. Never commit these — leaked service and device tokens cannot be
+# rotated silently across every installed client.
+.env
+.env.*
+!.env.example
+src/watcher/watcher.env
+.private-patterns
+
+# Workstation watcher runtime state. The ledger contains only metadata, but it
+# belongs to the deployed service rather than source control.
+src/watcher/state.json
+src/watcher/.watcher.lock
+src/watcher/service/
+
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcworkspace/xcuserdata/
+src/swift_app/Config/Signing.local.xcconfig
+src/swift_app/Config/TestFlight.local.env
+.DS_Store
+
+# Machine-specific operational notes.
+docs/operations/*.local.md
+
+# Swift
+.swiftpm/
+.build/
+
+# Backend build and provider caches. Lockfiles remain tracked for reproducible
+# installs and Terraform provider selection.
+src/server/node_modules/
+src/server/dist/
+src/server/terraform/.terraform/
