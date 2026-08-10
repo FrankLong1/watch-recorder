@@ -9,7 +9,7 @@ import { chmod, lstat, mkdir, open, readFile, realpath, rename, stat, writeFile 
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import readline from "node:readline";
 
-export const WATCHER_VERSION = "1.0.3";
+export const WATCHER_VERSION = "1.0.5";
 const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
 const FIRST_CURSOR: MemoCursor = {
   id: ZERO_UUID,
@@ -317,6 +317,13 @@ export function taskPrompt(transcript: string): string {
   ].join("\n");
 }
 
+export function taskTitle(transcript: string): string {
+  const compact = transcript.replace(/\s+/g, " ").trim();
+  if (compact.length === 0) return "WristMemo voice memo";
+  const excerpt = compact.length > 72 ? `${compact.slice(0, 71).trimEnd()}…` : compact;
+  return `WristMemo: ${excerpt}`;
+}
+
 export function threadStartRequest(config: Pick<Config, "taskCwd">, id: number): RpcMessage {
   return {
     method: "thread/start",
@@ -326,6 +333,11 @@ export function threadStartRequest(config: Pick<Config, "taskCwd">, id: number):
       approvalPolicy: "never",
       sandbox: "read-only",
       serviceName: "wristmemo_watcher",
+      // Codex Desktop groups persisted `threadSource: "user"` threads into
+      // the saved project whose path matches cwd. Without this supported
+      // metadata the task exists in Codex storage but is absent from the
+      // project's sidebar.
+      threadSource: "user",
     },
   };
 }
@@ -421,6 +433,11 @@ export class AppServerClient {
       threadId = createdId;
       await boundary.threadCreated(threadId);
     }
+
+    // A named thread is immediately recognizable in the Codex sidebar. This
+    // request is idempotent, so it is also safe after resuming an interrupted
+    // delivery between thread creation and turn creation.
+    await this.request("thread/name/set", { threadId, name: taskTitle(transcript) });
 
     await boundary.turnRequestStarting();
     const response = await this.requestMessage(

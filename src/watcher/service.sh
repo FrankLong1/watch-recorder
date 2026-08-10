@@ -3,7 +3,11 @@
 set -euo pipefail
 
 ACTION="${1:-status}"
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+if [[ -L "${SCRIPT_PATH}" ]]; then
+  SCRIPT_PATH="$(readlink "${SCRIPT_PATH}")"
+fi
+ROOT="$(cd "$(dirname "${SCRIPT_PATH}")" && pwd)"
 CONFIG_FILE="${WRISTMEMO_WATCHER_CONFIG_FILE:-${HOME}/.config/wristmemo-watcher/watcher.env}"
 STATE_DIR="${WRISTMEMO_WATCHER_STATE_DIR:-${HOME}/.local/state/wristmemo-watcher}"
 PID_FILE="${STATE_DIR}/supervisor.pid"

@@ -17,6 +17,7 @@ import {
   retryDelayMs,
   scanMemoPages,
   taskPrompt,
+  taskTitle,
   threadStartRequest,
   turnStartRequest,
   validatedFeedUrl,
@@ -43,6 +44,7 @@ describe("production Codex desktop watcher", () => {
         approvalPolicy: "never",
         sandbox: "read-only",
         serviceName: "wristmemo_watcher",
+        threadSource: "user",
       },
     });
     const turn = turnStartRequest({ taskCwd: "/workspace/projects/watch-recorder" }, "thread-1", transcript, 4);
@@ -55,6 +57,10 @@ describe("production Codex desktop watcher", () => {
     expect(JSON.stringify(turn)).toContain(transcript);
     expect(taskPrompt(transcript)).toContain("human continuation");
     expect(taskPrompt(transcript)).toContain("strictly read-only");
+    expect(taskTitle("  Please   propose a safer reconciliation design.  ")).toBe(
+      "WristMemo: Please propose a safer reconciliation design.",
+    );
+    expect(taskTitle(" ")).toBe("WristMemo voice memo");
   });
 
   test("keeps service credentials and config paths out of the Codex child environment", () => {
@@ -112,8 +118,10 @@ IFS= read -r thread_list
 printf '%s\n' '{"id":2,"result":{"data":[]}}'
 IFS= read -r thread_start
 printf '%s\n' '{"id":3,"result":{"thread":{"id":"thread-visible"}}}'
+IFS= read -r thread_name_set
+printf '%s\n' '{"id":4,"result":{}}'
 IFS= read -r turn_start
-printf '%s\n' '{"id":4,"result":{"turn":{"id":"turn-running","status":"inProgress"}}}'
+printf '%s\n' '{"id":5,"result":{"turn":{"id":"turn-running","status":"inProgress"}}}'
 sleep 5
 `, { mode: 0o700 });
       const client = new AppServerClient({
@@ -234,8 +242,10 @@ sleep 5
     expect((await readFile(join(root, "VERSION"), "utf8")).trim()).toBe(WATCHER_VERSION);
     const installer = await readFile(join(root, "image", "install-image-layer.sh"), "utf8");
     const startup = await readFile(join(root, "image", "245-wristmemo-watcher.sh"), "utf8");
+    const service = await readFile(join(root, "service.sh"), "utf8");
     expect(installer).toContain("/opt/wristmemo-watcher/${version}");
     expect(installer).toContain("test ! -e /opt/wristmemo-watcher/current/watcher.env");
+    expect(service).toContain('SCRIPT_PATH="$(readlink "${SCRIPT_PATH}")"');
     expect(startup).toContain(".config/wristmemo-watcher/watcher.env");
     expect(startup).toContain("/opt/wristmemo-watcher/current/service.sh start");
     expect(`${installer}\n${startup}`).not.toContain("your-cloud-run-service.example");
