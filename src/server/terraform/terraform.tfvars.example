@@ -18,7 +18,7 @@ operator_iam_user = "you@example.com"
 
 # A Web application OAuth client used as the backend ID-token audience. The iOS
 # OAuth client sets this as its server client ID.
-google_oauth_client_id = "000000000000-example.apps.googleusercontent.com"
+google_oauth_client_id = "your-google-oauth-client-id.apps.googleusercontent.com"
 
 # Use Google's immutable OpenID Connect `sub`, not an email address.
 google_allowed_user_subjects = ["your-google-subject"]

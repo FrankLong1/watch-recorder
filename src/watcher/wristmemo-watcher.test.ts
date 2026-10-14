@@ -192,8 +192,11 @@ sleep 5
     expect((await readFile(join(root, "VERSION"), "utf8")).trim()).toBe(WATCHER_VERSION);
     const installer = await readFile(join(root, "image", "install-image-layer.sh"), "utf8");
     const startup = await readFile(join(root, "image", "245-wristmemo-watcher.sh"), "utf8");
+    const service = await readFile(join(root, "service.sh"), "utf8");
     expect(installer).toContain("/opt/wristmemo-watcher/${version}");
     expect(installer).toContain("test ! -e /opt/wristmemo-watcher/current/watcher.env");
+    expect(installer).toContain("/usr/local/bin/wristmemo-watcher-service");
+    expect(service).toContain('SCRIPT_PATH="$(readlink -f "${SCRIPT_PATH}")"');
     expect(startup).toContain(".config/wristmemo-watcher/watcher.env");
     expect(startup).toContain("/opt/wristmemo-watcher/current/service.sh start");
     expect(`${installer}\n${startup}`).not.toContain("your-cloud-run-service.example");

@@ -129,7 +129,7 @@ INGEST_DATABASE_USER=wristmemo_local \
   ./scripts/migrate.sh
 
 DATABASE_URL="postgres://wristmemo_local:dev@localhost:55432/wristmemo" \
-GOOGLE_OAUTH_CLIENT_ID=000000000000-example.apps.googleusercontent.com \
+GOOGLE_OAUTH_CLIENT_ID=your-google-oauth-client-id.apps.googleusercontent.com \
 GOOGLE_ALLOWED_USER_SUBJECTS=allowed-google-subject \
 GOOGLE_WATCHER_SERVICE_ACCOUNTS=WATCHER_SERVICE_ACCOUNT_EMAIL \
 GOOGLE_WATCHER_OWNER_SUBJECT=allowed-google-subject \
